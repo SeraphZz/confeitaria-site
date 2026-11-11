@@ -19,7 +19,7 @@ App.pronto.then(async ({ loja, admin }) => {
     conteudo.innerHTML = `
       <p><a href="/">← Todos os doces</a></p>
       <div class="row g-7">
-        <div class="col-12 md:col-6">${fotoHtml(doce, 'grande')}</div>
+        <div class="col-12 md:col-6">${fotoHtml(doce, 'grande', { ampliar: true })}</div>
         <div class="col-12 md:col-6">
           ${doce.disponivel ? '' : '<p><span class="selo cinza">Oculto para clientes</span></p>'}
           <h1 class="mb-2">${esc(doce.nome)}</h1>
@@ -100,7 +100,7 @@ App.pronto.then(async ({ loja, admin }) => {
       const arquivo = campo('foto').files[0];
       if (!arquivo) return;
       try {
-        novaFoto = await reduzirImagem(arquivo);
+        novaFoto = await App.reduzirImagem(arquivo);
         campo('previa').innerHTML = `<div class="foto grande"><img src="${novaFoto}" alt="Prévia da nova foto"></div>`;
       } catch {
         aviso('Não consegui ler essa imagem. Tente outra.', { erro: true });
@@ -124,17 +124,6 @@ App.pronto.then(async ({ loja, admin }) => {
         aviso(erro.message, { erro: true });
       }
     });
-  }
-
-  // Reduz a foto no navegador (máx. 1200px, JPEG) para o envio ser rápido mesmo pelo celular.
-  async function reduzirImagem(arquivo) {
-    const bitmap = await createImageBitmap(arquivo);
-    const escala = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bitmap.width * escala);
-    canvas.height = Math.round(bitmap.height * escala);
-    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.85);
   }
 
   if (admin && new URLSearchParams(location.search).has('editar')) editar();

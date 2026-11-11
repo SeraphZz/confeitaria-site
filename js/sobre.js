@@ -11,6 +11,8 @@ App.pronto.then(({ loja, sobre: sobreInicial, admin }) => {
     conteudo.innerHTML = `
       <div class="row g-7">
         <div class="col-12 md:col-6">
+          ${sobre.imagem ? `<button type="button" class="retrato ampliar mb-5" data-ampliar aria-label="Ver a foto inteira">
+            <img src="${esc(sobre.imagem)}" alt="Foto da confeiteira"></button>` : ''}
           <h1 class="mb-4">${esc(sobre.titulo)}</h1>
           <p class="pre-linha fs-md">${esc(sobre.texto)}</p>
           ${loja.whatsapp ? `<a class="btn btn-solid theme-primary mt-3" href="${App.linkWhats(loja.whatsapp)}" target="_blank" rel="noopener">Falar comigo no WhatsApp</a>` : ''}
@@ -43,6 +45,12 @@ App.pronto.then(({ loja, sobre: sobreInicial, admin }) => {
     conteudo.innerHTML = `
       <form class="painel-edicao" id="form-sobre">
         <h1 class="fs-xl mb-5">Editando a página Sobre</h1>
+        <div class="mb-5">
+          <div id="previa">${sobre.imagem ? `<div class="retrato mb-3"><img src="${esc(sobre.imagem)}" alt="Foto atual"></div>` : ''}</div>
+          <label class="form-label" for="foto">Sua foto</label>
+          <input class="form-control" id="foto" type="file" accept="image/jpeg,image/png,image/webp" style="max-width: 24rem">
+          ${sobre.imagem ? '<label class="d-flex gap-2 align-items-center mt-3"><input type="checkbox" id="remover-foto"> Remover a foto atual</label>' : ''}
+        </div>
         <div class="mb-4"><label class="form-label" for="titulo">Título</label>
           <input class="form-control" id="titulo" maxlength="80" required value="${esc(sobre.titulo)}"></div>
         <div class="mb-5"><label class="form-label" for="texto">Sua história</label>
@@ -55,6 +63,18 @@ App.pronto.then(({ loja, sobre: sobreInicial, admin }) => {
           <button type="button" class="btn btn-outline theme-primary" id="cancelar">Cancelar</button>
         </div>
       </form>`;
+
+    let novaFoto = null;
+    document.getElementById('foto').addEventListener('change', async (evento) => {
+      const arquivo = evento.target.files[0];
+      if (!arquivo) return;
+      try {
+        novaFoto = await App.reduzirImagem(arquivo);
+        document.getElementById('previa').innerHTML = `<div class="retrato mb-3"><img src="${novaFoto}" alt="Prévia da nova foto"></div>`;
+      } catch {
+        aviso('Não consegui ler essa imagem. Tente outra.', { erro: true });
+      }
+    });
 
     const etapas = document.getElementById('etapas');
     document.getElementById('nova-etapa').addEventListener('click', () => etapas.insertAdjacentHTML('beforeend', etapaHtml()));
@@ -73,6 +93,8 @@ App.pronto.then(({ loja, sobre: sobreInicial, admin }) => {
         sobre = await api('/api/sobre', { metodo: 'PUT', corpo: {
           titulo: document.getElementById('titulo').value, texto: document.getElementById('texto').value, trajetoria,
         } });
+        if (novaFoto) sobre = await api('/api/sobre/imagem', { metodo: 'PUT', corpo: { imagem: novaFoto } });
+        else if (document.getElementById('remover-foto')?.checked) sobre = await api('/api/sobre/imagem', { metodo: 'PUT', corpo: { imagem: '' } });
         mostrar();
         aviso('Página atualizada.');
       } catch (erro) {

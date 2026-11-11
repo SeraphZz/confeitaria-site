@@ -438,14 +438,15 @@ const IMAGENS = {
   webp: { ext: 'webp', ok: (b) => b.subarray(0, 4).toString() === 'RIFF' && b.subarray(8, 12).toString() === 'WEBP' },
 };
 
-function salvarImagem(doce, dataUrl) {
+// Serve para qualquer registro com o campo `imagem` (um doce ou a página Sobre); `nome` vira o início do arquivo.
+function salvarImagem(doce, dataUrl, nome = doce.id) {
   const m = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(typeof dataUrl === 'string' ? dataUrl : '');
   if (!m) throw new ErroHttp(400, 'Envie uma foto JPG, PNG ou WebP.');
   const bytes = Buffer.from(m[2], 'base64');
   const tipo = IMAGENS[m[1]];
   if (bytes.length > 2 * 1024 * 1024 || !tipo.ok(bytes)) throw new ErroHttp(400, 'Foto inválida ou maior que 2 MB.');
   removerImagem(doce);
-  const arquivo = `${doce.id}-${Date.now()}.${tipo.ext}`;
+  const arquivo = `${nome}-${Date.now()}.${tipo.ext}`;
   fs.writeFileSync(path.join(UPLOADS_DIR, arquivo), bytes);
   doce.imagem = `/uploads/${arquivo}`;
 }
@@ -613,6 +614,7 @@ const rotas = [
     const corpo = await lerJson(req);
     if (!Array.isArray(corpo.trajetoria) || corpo.trajetoria.length > 30) throw new ErroHttp(400, 'Trajetória inválida.');
     db.sobre = {
+      imagem: db.sobre.imagem || '', // a foto tem rota própria, logo abaixo
       titulo: texto(corpo.titulo, { max: 80, obrigatorio: true, campo: 'título' }),
       texto: texto(corpo.texto, { max: 5000, campo: 'história' }),
       trajetoria: corpo.trajetoria.map((t) => ({
@@ -621,6 +623,13 @@ const rotas = [
         texto: texto(t && t.texto, { max: 400, campo: 'texto da etapa' }),
       })),
     };
+    salvar();
+    return db.sobre;
+  }, true],
+
+  ['PUT', /^\/api\/sobre\/imagem$/, async (req) => {
+    const { imagem } = await lerJson(req, 3 * 1024 * 1024);
+    if (imagem) salvarImagem(db.sobre, imagem, 'confeiteira'); else removerImagem(db.sobre);
     salvar();
     return db.sobre;
   }, true],

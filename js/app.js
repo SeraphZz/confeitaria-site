@@ -79,9 +79,41 @@ const App = (() => {
     el.hidden = n === 0;
   }
 
-  function fotoHtml(doce, classe = '') {
-    const dentro = doce.imagem ? `<img src="${esc(doce.imagem)}" alt="${esc(doce.nome)}" loading="lazy">` : `<span aria-hidden="true">${esc(doce.emoji)}</span>`;
+  // `ampliar: true` transforma a foto em um botão que abre a imagem inteira (ver visor, abaixo).
+  function fotoHtml(doce, classe = '', { ampliar = false } = {}) {
+    const img = `<img src="${esc(doce.imagem)}" alt="${esc(doce.nome)}" loading="lazy">`;
+    const dentro = !doce.imagem ? `<span aria-hidden="true">${esc(doce.emoji)}</span>`
+      : ampliar ? `<button type="button" class="ampliar" data-ampliar aria-label="Ver a foto inteira de ${esc(doce.nome)}">${img}</button>` : img;
     return `<div class="foto ${classe}">${dentro}</div>`;
+  }
+
+  // ---- visor: clique em qualquer [data-ampliar] abre a foto inteira, sem o corte da miniatura
+  let visor;
+  document.addEventListener('click', (evento) => {
+    const img = evento.target.closest?.('[data-ampliar]')?.querySelector('img');
+    if (!img) return;
+    if (!visor) {
+      visor = document.createElement('dialog');
+      visor.className = 'visor';
+      visor.innerHTML = '<img alt=""><button type="button" aria-label="Fechar">×</button>';
+      visor.addEventListener('click', () => visor.close()); // clique em qualquer lugar (ou Esc) fecha
+      document.body.append(visor);
+    }
+    const grande = visor.querySelector('img');
+    grande.src = img.src;
+    grande.alt = img.alt;
+    visor.showModal();
+  });
+
+  // Reduz a foto no navegador (máx. 1200px, JPEG) para o envio ser rápido mesmo pelo celular.
+  async function reduzirImagem(arquivo) {
+    const bitmap = await createImageBitmap(arquivo);
+    const escala = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * escala);
+    canvas.height = Math.round(bitmap.height * escala);
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.85);
   }
 
   function montarCabecalho({ loja, admin, cliente }) {
@@ -233,7 +265,7 @@ const App = (() => {
   };
 
   return {
-    esc, brl, lerPreco, dataBr, api, aviso, carrinho, fotoHtml, sair, STATUS, pronto,
+    esc, brl, lerPreco, dataBr, api, aviso, carrinho, fotoHtml, reduzirImagem, sair, STATUS, pronto,
     formatarTelefone, linkWhats, enderecoHtml, lerEndereco, ligarMascaras,
   };
 })();
