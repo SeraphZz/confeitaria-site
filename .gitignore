@@ -1,0 +1,4 @@
+node_modules/
+# Dados reais (pedidos, senha, fotos) nunca vão para o repositório
+data/
+.idea/

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrar</title>
+  <link rel="stylesheet" href="/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+  <div id="cabecalho"></div>
+  <main>
+    <div class="container secao" style="max-width: 26rem">
+      <h1 class="secao-titulo">Entrar</h1>
+      <form class="painel" id="form-login">
+        <div class="mb-5">
+          <label class="form-label" for="usuario">E-mail</label>
+          <input class="form-control" id="usuario" autocomplete="username" autocapitalize="none" required>
+          <div class="suave fs-sm mt-1">Confeiteira: use seu nome de usuário.</div>
+        </div>
+        <div class="mb-5">
+          <label class="form-label" for="senha">Senha</label>
+          <input class="form-control" id="senha" type="password" autocomplete="current-password" required>
+        </div>
+        <p class="fg-danger" id="erro" role="alert" hidden></p>
+        <button class="btn btn-solid theme-primary w-100">Entrar</button>
+        <p class="text-center mt-4 mb-0"><a href="/esqueci-senha">Esqueci minha senha</a></p>
+      </form>
+      <p class="mt-5 text-center">Primeira vez por aqui? <a id="elo-cadastro" href="/cadastro">Criar conta</a></p>
+    </div>
+  </main>
+  <div id="rodape"></div>
+  <script type="module" src="/js/bootstrap.bundle.min.js"></script>
+  <script defer src="/js/app.js"></script>
+  <script defer src="/js/login.js"></script>
+</body>
+</html>

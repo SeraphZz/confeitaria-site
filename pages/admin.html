@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Painel da confeiteira</title>
+  <link rel="stylesheet" href="/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+  <div id="cabecalho"></div>
+  <main>
+    <div class="container secao">
+      <h1 class="secao-titulo">Painel</h1>
+      <div id="alerta-senha" class="painel-edicao mb-5" hidden>
+        Você ainda está usando a senha inicial. <a href="#config">Troque a senha</a> para proteger o painel.
+      </div>
+      <div class="abas" role="tablist">
+        <button type="button" role="tab" data-aba="resumo">Resumo</button>
+        <button type="button" role="tab" data-aba="pedidos">Pedidos</button>
+        <button type="button" role="tab" data-aba="clientes">Clientes</button>
+        <button type="button" role="tab" data-aba="doces">Doces</button>
+        <button type="button" role="tab" data-aba="config">Configurações</button>
+      </div>
+
+      <section id="aba-resumo" hidden>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-5">
+          <div class="seletor" id="periodo" role="group" aria-label="Período">
+            <button type="button" data-dias="7">7 dias</button>
+            <button type="button" data-dias="30">30 dias</button>
+            <button type="button" data-dias="90">90 dias</button>
+          </div>
+          <span class="suave fs-sm">Receita = pedidos não cancelados, pela data em que foram feitos.</span>
+        </div>
+        <div class="kpis mb-5" id="kpis"></div>
+        <div class="row g-5">
+          <div class="col-12 lg:col-7">
+            <div class="painel">
+              <h2 class="fs-lg mb-4">Receita por dia</h2>
+              <div class="grafico"><canvas id="grafico-receita" role="img" aria-label="Gráfico de barras da receita por dia"></canvas></div>
+              <details class="mt-4"><summary class="suave fs-sm">Ver em tabela</summary><div id="tabela-receita" class="mt-3"></div></details>
+            </div>
+          </div>
+          <div class="col-12 lg:col-5">
+            <div class="painel">
+              <h2 class="fs-lg mb-4">Doces que mais renderam</h2>
+              <div class="grafico"><canvas id="grafico-doces" role="img" aria-label="Gráfico de barras da receita por doce"></canvas></div>
+              <details class="mt-4"><summary class="suave fs-sm">Ver em tabela</summary><div id="tabela-doces" class="mt-3"></div></details>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="aba-pedidos" hidden>
+        <div class="d-flex flex-wrap align-items-center gap-3 mb-5">
+          <label for="filtro-status" class="fw-semibold">Mostrar</label>
+          <select id="filtro-status" class="form-control" style="max-width: 14rem"></select>
+        </div>
+        <div id="lista-pedidos"></div>
+      </section>
+
+      <section id="aba-clientes" hidden>
+        <p class="suave fs-sm">Pedidos agrupados por pessoa, de quem mais comprou para quem menos comprou. Toque em uma pessoa para ver os pedidos dela. Quem pediu sem cadastro é agrupado pelo telefone; cancelados não entram no total.</p>
+        <input id="busca-cliente" class="form-control mb-5" type="search" placeholder="Buscar por nome, telefone ou e-mail" aria-label="Buscar cliente" style="max-width: 24rem">
+        <div id="lista-clientes"></div>
+      </section>
+
+      <section id="aba-doces" hidden>
+        <form class="painel mb-5" id="form-novo-doce">
+          <h2 class="fs-lg mb-4">Novo doce</h2>
+          <div class="row g-4 align-items-end">
+            <div class="col-12 md:col-6"><label class="form-label" for="novo-nome">Nome</label><input class="form-control" id="novo-nome" maxlength="80" required></div>
+            <div class="col-6 md:col-3"><label class="form-label" for="novo-preco">Preço (R$)</label><input class="form-control" id="novo-preco" inputmode="decimal" placeholder="0,00" required></div>
+            <div class="col-6 md:col-3"><button class="btn btn-solid theme-primary w-100">Criar e editar</button></div>
+          </div>
+        </form>
+        <div class="painel" id="lista-doces"></div>
+      </section>
+
+      <section id="aba-config" hidden>
+        <div class="row g-5">
+          <div class="col-12 lg:col-7">
+            <form class="painel" id="form-loja">
+              <h2 class="fs-lg mb-4">Dados da loja e contato</h2>
+              <div class="mb-4"><label class="form-label" for="loja-nome">Nome da loja</label><input class="form-control" id="loja-nome" maxlength="60" required></div>
+              <div class="mb-4"><label class="form-label" for="loja-slogan">Frase da página inicial</label><input class="form-control" id="loja-slogan" maxlength="160"></div>
+              <div class="mb-4"><label class="form-label" for="loja-whatsapp">WhatsApp com DDD</label><input class="form-control" id="loja-whatsapp" type="tel" data-mascara="telefone" inputmode="numeric" placeholder="(11) 99999-9999"></div>
+              <div class="mb-4"><label class="form-label" for="loja-instagram">Instagram</label><input class="form-control" id="loja-instagram" maxlength="40"></div>
+              <div class="mb-4"><label class="form-label" for="loja-email">E-mail</label><input class="form-control" id="loja-email" type="email" maxlength="120"></div>
+              <div class="mb-5"><label class="form-label" for="loja-cidade">Cidade</label><input class="form-control" id="loja-cidade" maxlength="80"></div>
+              <button class="btn btn-solid theme-primary">Salvar</button>
+            </form>
+          </div>
+          <div class="col-12 lg:col-5">
+            <form class="painel" id="form-senha">
+              <h2 class="fs-lg mb-4">Trocar senha</h2>
+              <div class="mb-4"><label class="form-label" for="senha-atual">Senha atual</label><input class="form-control" id="senha-atual" type="password" autocomplete="current-password" required></div>
+              <div class="mb-5"><label class="form-label" for="senha-nova">Nova senha (mínimo 8 caracteres)</label><input class="form-control" id="senha-nova" type="password" autocomplete="new-password" minlength="8" required></div>
+              <button class="btn btn-solid theme-primary">Trocar senha</button>
+            </form>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+  <div id="rodape"></div>
+  <script type="module" src="/js/bootstrap.bundle.min.js"></script>
+  <script defer src="/js/vendor/chart.umd.min.js"></script>
+  <script defer src="/js/app.js"></script>
+  <script defer src="/js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "confeitaria",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Site de confeitaria com pedidos, carrinho e painel da confeiteira",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node scripts/demo.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

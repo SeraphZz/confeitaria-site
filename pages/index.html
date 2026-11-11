@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Doces artesanais</title>
+  <link rel="stylesheet" href="/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+  <div id="cabecalho"></div>
+  <main>
+    <section class="capa">
+      <div class="container">
+        <h1 id="capa-titulo">Doces artesanais</h1>
+        <p id="capa-slogan"></p>
+        <a class="btn btn-solid theme-primary btn-lg" href="#doces">Ver os doces</a>
+      </div>
+    </section>
+    <section class="secao" id="doces">
+      <div class="container">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-5">
+          <h2 class="secao-titulo mb-0">Nossos doces</h2>
+          <a class="btn btn-outline theme-primary" id="novo-doce" href="/admin#doces" hidden>+ Novo doce</a>
+        </div>
+        <div class="grade-doces" id="grade"></div>
+      </div>
+    </section>
+  </main>
+  <div id="rodape"></div>
+  <script type="module" src="/js/bootstrap.bundle.min.js"></script>
+  <script defer src="/js/app.js"></script>
+  <script defer src="/js/home.js"></script>
+</body>
+</html>
