@@ -4,7 +4,9 @@
 const crypto = require('node:crypto');
 const banco = require('../banco');
 const { ErroHttp } = require('./http');
-const { texto, inteiro, dataLocal, lerTelefone, lerEndereco, formatarEndereco } = require('./validacao');
+const { texto, inteiro, lerTelefone, lerEndereco, formatarEndereco } = require('./validacao');
+const configuracoes = require('./configuracoes');
+const { diaNoFuso, somarDias, instanteAntesDoDia } = require('./datas');
 
 const STATUS = ['novo', 'confirmado', 'producao', 'pronto', 'entregue', 'cancelado'];
 const STATUS_ABERTOS = ['novo', 'confirmado', 'producao', 'pronto'];
@@ -18,7 +20,7 @@ function criarPedido(corpo, conta) {
   const tipo = entrega.tipo === 'entrega' ? 'entrega' : 'retirada';
   const endereco = tipo === 'entrega' ? lerEndereco(entrega.endereco, true) : null;
   const data = String(entrega.data || '');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || Number.isNaN(Date.parse(data)) || data < dataLocal(new Date())) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || Number.isNaN(Date.parse(data)) || data < diaNoFuso(new Date(), configuracoes.fusoHorario())) {
     throw new ErroHttp(400, 'Escolha uma data de hoje em diante.');
   }
 
@@ -76,18 +78,15 @@ function montarClientes() {
   }).sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome));
 }
 
+// Os dias são os do calendário da loja (fuso configurado), não os do servidor.
 function montarDashboard(dias) {
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-  const inicio = new Date(hoje);
-  inicio.setDate(inicio.getDate() - (dias - 1));
-  const inicioAnterior = new Date(inicio);
-  inicioAnterior.setDate(inicioAnterior.getDate() - dias);
+  const fuso = configuracoes.fusoHorario();
+  const hoje = diaNoFuso(new Date(), fuso);
+  const inicio = somarDias(hoje, -(dias - 1));
+  const inicioAnterior = somarDias(inicio, -dias);
 
   const serie = new Map();
-  for (let d = new Date(inicio); d <= hoje; d.setDate(d.getDate() + 1)) {
-    serie.set(dataLocal(d), { data: dataLocal(d), receita: 0, pedidos: 0 });
-  }
+  for (let d = inicio; d <= hoje; d = somarDias(d, 1)) serie.set(d, { data: d, receita: 0, pedidos: 0 });
 
   const porDoce = new Map();
   const status = Object.fromEntries(STATUS.map((s) => [s, 0]));
@@ -95,12 +94,12 @@ function montarDashboard(dias) {
   const emAberto = banco.contarPedidosComStatus(STATUS_ABERTOS); // de qualquer data
 
   // Só os pedidos do período e do período anterior (para a comparação) saem do banco.
-  for (const p of banco.listarPedidos({ desde: inicioAnterior.toISOString() })) {
-    const criado = new Date(p.criadoEm);
+  for (const p of banco.listarPedidos({ desde: instanteAntesDoDia(inicioAnterior) })) {
+    const criado = diaNoFuso(new Date(p.criadoEm), fuso);
     if (criado >= inicio) status[p.status]++;
     if (p.status === 'cancelado') continue; // cancelados não contam como receita
     if (criado >= inicio) {
-      const dia = serie.get(dataLocal(criado));
+      const dia = serie.get(criado);
       if (!dia) continue;
       dia.receita += p.total;
       dia.pedidos++;

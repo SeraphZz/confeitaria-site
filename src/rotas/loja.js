@@ -1,59 +1,37 @@
 'use strict';
-// Rotas de configuração, só da loja: página Sobre, dados de contato e senha de acesso ao painel.
+// Rotas de configuração, só da loja: dados de contato, página Sobre, operação e senha de acesso ao painel.
+// As regras de cada configuração (campos, limites, o que é público) ficam em src/configuracoes.js.
 
-const banco = require('../../banco');
 const { ErroHttp, lerJson, ipDe, limitar } = require('../http');
-const { texto } = require('../validacao');
 const { senhaConfere, novaSenha } = require('../senhas');
 const { derrubarOutrasSessoesAdmin } = require('../sessao');
 const { salvarImagem, removerImagem, LIMITE_JSON_COM_FOTO } = require('../imagens');
+const configuracoes = require('../configuracoes');
 
 module.exports = [
-  ['PUT', /^\/api\/sobre$/, async (req) => {
-    const corpo = await lerJson(req);
-    if (!Array.isArray(corpo.trajetoria) || corpo.trajetoria.length > 30) throw new ErroHttp(400, 'Trajetória inválida.');
-    const sobre = {
-      imagem: banco.lerConfig('sobre').imagem || '', // a foto tem rota própria, logo abaixo
-      titulo: texto(corpo.titulo, { max: 80, obrigatorio: true, campo: 'título' }),
-      texto: texto(corpo.texto, { max: 5000, campo: 'história' }),
-      trajetoria: corpo.trajetoria.map((t) => ({
-        ano: texto(t && t.ano, { max: 12, campo: 'ano' }),
-        titulo: texto(t && t.titulo, { max: 80, obrigatorio: true, campo: 'título da etapa' }),
-        texto: texto(t && t.texto, { max: 400, campo: 'texto da etapa' }),
-      })),
-    };
-    banco.gravarConfig('sobre', sobre);
-    return sobre;
-  }, true],
+  // Tudo o que o painel pode editar, de uma vez. Nunca inclui a conta de acesso.
+  ['GET', /^\/api\/configuracoes$/, () => configuracoes.editaveis(), true],
+
+  // Grava uma seção inteira (ex.: /api/configuracoes/operacao). Seção desconhecida ou interna responde 404.
+  ['PUT', /^\/api\/configuracoes\/([a-z]{1,30})$/, async (req, [secao]) => configuracoes.gravar(secao, await lerJson(req)), true],
+
+  // Endereços usados pelas telas atuais; equivalem a PUT /api/configuracoes/loja e /sobre.
+  ['PUT', /^\/api\/loja$/, async (req) => configuracoes.gravar('loja', await lerJson(req)), true],
+  ['PUT', /^\/api\/sobre$/, async (req) => configuracoes.gravar('sobre', await lerJson(req)), true],
 
   ['PUT', /^\/api\/sobre\/imagem$/, async (req) => {
     const { imagem } = await lerJson(req, LIMITE_JSON_COM_FOTO);
-    const sobre = banco.lerConfig('sobre');
+    const sobre = configuracoes.ler('sobre');
     if (imagem) salvarImagem(sobre, imagem, 'confeiteira'); else removerImagem(sobre);
-    banco.gravarConfig('sobre', sobre);
-    return sobre;
-  }, true],
-
-  ['PUT', /^\/api\/loja$/, async (req) => {
-    const corpo = await lerJson(req);
-    const loja = {
-      nome: texto(corpo.nome, { max: 60, obrigatorio: true, campo: 'nome da loja' }),
-      slogan: texto(corpo.slogan, { max: 160, campo: 'slogan' }),
-      whatsapp: String(corpo.whatsapp || '').replace(/\D/g, '').slice(0, 15),
-      instagram: texto(corpo.instagram, { max: 40, campo: 'Instagram' }).replace(/^@/, '').replace(/[^\w.]/g, ''),
-      email: texto(corpo.email, { max: 120, campo: 'e-mail' }),
-      cidade: texto(corpo.cidade, { max: 80, campo: 'cidade' }),
-    };
-    banco.gravarConfig('loja', loja);
-    return loja;
+    return configuracoes.substituir('sobre', sobre);
   }, true],
 
   ['PUT', /^\/api\/senha$/, async (req) => {
     limitar(`senha:${ipDe(req)}`, 8, 15 * 60 * 1000);
     const { atual, nova } = await lerJson(req);
-    const admin = banco.lerConfig('admin');
+    const admin = configuracoes.ler('admin');
     if (!senhaConfere(atual, admin)) throw new ErroHttp(400, 'A senha atual não confere.');
-    banco.gravarConfig('admin', { ...admin, ...novaSenha(nova), senhaInicial: false });
+    configuracoes.substituir('admin', { ...admin, ...novaSenha(nova), senhaInicial: false });
     derrubarOutrasSessoesAdmin(req);
     return { ok: true };
   }, true],

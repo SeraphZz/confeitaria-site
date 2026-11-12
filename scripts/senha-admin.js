@@ -3,10 +3,10 @@
 //   node scripts/senha-admin.js              -> sorteia uma senha nova e mostra na tela
 //   node scripts/senha-admin.js "MinhaSenha" -> usa a senha informada (mínimo 8 caracteres)
 
-const banco = require('../banco');
+const configuracoes = require('../src/configuracoes');
 const { TAMANHO_MINIMO, gerarHash, sortearSenha } = require('../src/senhas');
 
-const admin = banco.lerConfig('admin');
+const admin = configuracoes.ler('admin');
 if (!admin) {
   console.error('Banco ainda vazio. Rode "node server.js" uma vez: a senha inicial aparece no terminal.');
   process.exit(1);
@@ -18,7 +18,7 @@ if (senha.length < TAMANHO_MINIMO) {
   process.exit(1);
 }
 
-banco.gravarConfig('admin', {
+configuracoes.substituir('admin', {
   ...admin, ...gerarHash(senha),
   senhaInicial: !process.argv[2], // senha sorteada: o painel lembra de trocar
 });

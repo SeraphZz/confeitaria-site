@@ -8,6 +8,7 @@ const { texto, lerEmail, lerTelefone, lerEndereco } = require('../validacao');
 const { senhaConfere, novaSenha } = require('../senhas');
 const { clienteLogado, exigirCliente, abrirSessao, encerrarSessao, derrubarSessoesDoCliente, ehAdmin } = require('../sessao');
 const { enviarLinkRedefinicao, conferirToken } = require('../redefinicao');
+const configuracoes = require('../configuracoes');
 
 // O que pode sair do servidor sobre um cliente (nunca salt/hash).
 function clientePublico(c) {
@@ -16,7 +17,8 @@ function clientePublico(c) {
 
 module.exports = [
   ['GET', /^\/api\/site$/, (req) => ({
-    loja: banco.lerConfig('loja'), sobre: banco.lerConfig('sobre'), admin: ehAdmin(req), cliente: clientePublico(clienteLogado(req)),
+    // Só as seções marcadas como públicas em src/configuracoes.js saem daqui.
+    ...configuracoes.publicas(), admin: ehAdmin(req), cliente: clientePublico(clienteLogado(req)),
   })],
 
   ['POST', /^\/api\/login$/, async (req, _p, res) => {
@@ -24,7 +26,7 @@ module.exports = [
     // Login único: a confeiteira entra com o usuário dela; clientes, com o e-mail.
     const { usuario, senha } = await lerJson(req);
     const login = typeof usuario === 'string' ? usuario.trim().toLowerCase() : '';
-    const admin = banco.lerConfig('admin');
+    const admin = configuracoes.ler('admin');
     if (login === admin.usuario) {
       if (!senhaConfere(senha, admin)) throw new ErroHttp(401, 'E-mail/usuário ou senha incorretos.');
       abrirSessao(res, { tipo: 'admin' });

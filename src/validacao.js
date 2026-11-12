@@ -17,11 +17,6 @@ function inteiro(valor, { min, max, campo }) {
   return valor;
 }
 
-function dataLocal(d) {
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
 function lerEmail(valor) {
   const email = texto(valor, { max: 120, obrigatorio: true, campo: 'e-mail' }).toLowerCase();
   if (!/^[^\s@<>"',;]+@[^\s@<>"',;]+\.[^\s@<>"',;]+$/.test(email)) throw new ErroHttp(400, 'Informe um e-mail válido.');
@@ -59,4 +54,4 @@ function formatarEndereco(e) {
   return [[linha1, cidade].filter(Boolean).join(', '), cep].filter(Boolean).join(' - ');
 }
 
-module.exports = { texto, inteiro, dataLocal, lerEmail, lerTelefone, lerEndereco, formatarEndereco };
+module.exports = { texto, inteiro, lerEmail, lerTelefone, lerEndereco, formatarEndereco };

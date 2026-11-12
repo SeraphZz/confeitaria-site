@@ -5,6 +5,7 @@ const banco = require('../../banco');
 const { ErroHttp, lerJson, ipDe, limitar } = require('../http');
 const { exigirCliente } = require('../sessao');
 const { STATUS, criarPedido, montarClientes, montarDashboard } = require('../pedidos');
+const configuracoes = require('../configuracoes');
 
 module.exports = [
   ['POST', /^\/api\/pedidos$/, async (req) => {
@@ -30,6 +31,6 @@ module.exports = [
 
   ['GET', /^\/api\/dashboard$/, (req, _p, _res, url) => {
     const dias = Number(url.searchParams.get('dias'));
-    return { ...montarDashboard([7, 30, 90].includes(dias) ? dias : 30), senhaInicial: banco.lerConfig('admin').senhaInicial };
+    return { ...montarDashboard([7, 30, 90].includes(dias) ? dias : 30), senhaInicial: configuracoes.ler('admin').senhaInicial };
   }, true],
 ];

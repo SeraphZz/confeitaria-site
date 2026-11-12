@@ -4,6 +4,7 @@
 const crypto = require('node:crypto');
 const banco = require('../banco');
 const email = require('../email');
+const configuracoes = require('./configuracoes');
 const { PRODUCAO, SITE_URL } = require('./ambiente');
 const { limparVencidos } = require('./http');
 
@@ -24,7 +25,7 @@ function enviarLinkRedefinicao(cliente) {
     if (PRODUCAO) return console.error('Redefinição de senha pedida, mas o SMTP não está configurado (veja o README).');
     return console.log(`\n[e-mail não configurado] Link de redefinição para ${cliente.email}:\n${link}\n`);
   }
-  const loja = banco.lerConfig('loja');
+  const loja = configuracoes.ler('loja');
   email.enviarEmail({
     para: cliente.email, nomeRemetente: loja.nome, assunto: `Redefinir sua senha - ${loja.nome}`,
     texto: `Olá, ${cliente.nome}!\n\nRecebemos um pedido para redefinir a senha da sua conta em ${loja.nome}.\n` +

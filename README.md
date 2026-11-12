@@ -76,7 +76,8 @@ A senha da **confeiteira** não é recuperada por e-mail (a conta dela não tem 
 server.js        ponto de entrada: sobe o servidor e encaminha cada pedido para a rota certa
 src/ambiente.js  tudo o que vem de variáveis de ambiente (porta, endereço do site, proxy)
 src/rotas/       rotas da API por assunto: contas.js, catalogo.js, pedidos.js, loja.js
-src/*.js         sessão, senhas, validação, regras de pedidos, imagens e arquivos estáticos
+src/configuracoes.js  configurações da loja: padrões, validação e o que é público (ver abaixo)
+src/*.js         sessão, senhas, validação, datas, regras de pedidos, imagens e arquivos estáticos
 banco.js         camada de dados (SQLite): todas as consultas
 migracoes/       estrutura das tabelas, em arquivos numerados (ver abaixo)
 email.js         envio de e-mail por SMTP (esqueci minha senha)
@@ -89,6 +90,23 @@ scripts/         senha-admin.js, backup.js e demo.js
 testes/          testes automáticos (npm test)
 data/            criado ao rodar: loja.db (banco) e uploads/ (fotos) — faça backup desta pasta
 ```
+
+## Configurações da loja
+
+Tudo o que é próprio de um estabelecimento fica no banco (tabela `config`) e passa por um módulo só, `src/configuracoes.js`. Cada seção declara os valores padrão, a validação e quem pode ver:
+
+| Seção | Conteúdo | Quem recebe |
+|---|---|---|
+| `loja` | nome, slogan, WhatsApp, Instagram, e-mail, cidade | qualquer visitante |
+| `sobre` | texto, trajetória e foto da página Sobre | qualquer visitante |
+| `operacao` | fuso horário da loja | só o painel |
+| `admin` | conta de acesso ao painel | ninguém (nunca sai do servidor) |
+
+O painel lê as seções editáveis em `GET /api/configuracoes` e grava uma seção em `PUT /api/configuracoes/<seção>`. Para criar uma configuração nova, acrescente o campo em `padrao` e em `validar` na seção certa; instalações antigas recebem o valor padrão sem precisar de migração.
+
+**Fuso horário.** A data mínima dos pedidos ("de hoje em diante") e os dias do resumo seguem o fuso da loja, não o do servidor. O padrão é `America/Sao_Paulo`. Para uma loja em outro fuso (ex.: `America/Manaus`), grave `{"fusoHorario": "America/Manaus"}` em `/api/configuracoes/operacao`; o campo entra na tela de Configurações em uma etapa futura.
+
+O que muda de um **servidor** para outro (porta, endereço público, proxy, SMTP) continua em variáveis de ambiente, lidas em `src/ambiente.js` e `email.js`.
 
 ## Testes
 

@@ -107,11 +107,12 @@ function criarNavegador(base, ipFixo) {
   };
 }
 
-function hojeLocal(maisDias = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() + maisDias);
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+// "Hoje" (AAAA-MM-DD) no fuso da loja — o padrão da instalação é America/Sao_Paulo —, mais ou menos alguns dias.
+// Não usa o fuso da máquina que roda os testes: o resultado tem de ser o mesmo em qualquer lugar.
+function hojeLocal(maisDias = 0, fuso = 'America/Sao_Paulo') {
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: fuso, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const [a, m, d] = hoje.split('-').map(Number);
+  return new Date(Date.UTC(a, m - 1, d + maisDias)).toISOString().slice(0, 10);
 }
 
 let contador = 0;

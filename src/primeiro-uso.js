@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const banco = require('../banco');
 const { SENHA_INICIAL_ADMIN } = require('./ambiente');
 const { gerarHash, sortearSenha } = require('./senhas');
+const configuracoes = require('./configuracoes');
 
 function criarSlug(nome, existentes) {
   const base = nome.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -27,9 +28,9 @@ function criarDadosIniciais() {
         unidade: d.unidade, emoji: d.emoji, imagem: '', disponivel: true,
       });
     }
-    banco.gravarConfig('loja', seed.loja);
-    banco.gravarConfig('sobre', seed.sobre);
-    banco.gravarConfig('admin', { usuario: 'confeiteira', ...gerarHash(senha), senhaInicial: true });
+    configuracoes.substituir('loja', seed.loja);
+    configuracoes.substituir('sobre', seed.sobre);
+    configuracoes.substituir('admin', { usuario: 'confeiteira', ...gerarHash(senha), senhaInicial: true });
   });
   if (!SENHA_INICIAL_ADMIN) {
     console.log('\n==============================================');
@@ -42,7 +43,7 @@ function criarDadosIniciais() {
 }
 
 function garantirDadosIniciais() {
-  if (!banco.lerConfig('admin')) criarDadosIniciais();
+  if (!configuracoes.ler('admin')) criarDadosIniciais();
 }
 
 module.exports = { criarSlug, garantirDadosIniciais };
