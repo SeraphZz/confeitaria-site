@@ -1,14 +1,15 @@
 'use strict';
 // Carrinho + formulário de reserva do pedido.
 
-App.pronto.then(async ({ loja, admin, cliente }) => {
-  const { esc, brl, api, aviso, carrinho, fotoHtml } = App;
+App.pronto.then(async ({ loja, admin, cliente, catalogo }) => {
+  const { esc, brl, api, aviso, carrinho, fotoHtml, minusculas } = App;
+  const plural = esc(minusculas(catalogo.nomePlural));
   const conteudo = document.getElementById('conteudo');
   document.title = `Carrinho · ${loja.nome}`;
 
-  const doces = new Map((await api('/api/doces')).map((d) => [d.id, d]));
-  // Tira do carrinho doces que deixaram de existir ou ficaram indisponíveis.
-  const validos = carrinho.itens().filter((i) => doces.has(i.doceId));
+  const produtos = new Map((await api('/api/produtos')).map((p) => [p.id, p]));
+  // Tira do carrinho o que deixou de existir ou ficou indisponível.
+  const validos = carrinho.itens().filter((i) => produtos.has(i.produtoId));
   if (validos.length !== carrinho.itens().length) carrinho.salvar(validos);
 
   const hoje = new Date();
@@ -35,25 +36,25 @@ App.pronto.then(async ({ loja, admin, cliente }) => {
     </div>`;
 
   function total(itens) {
-    return itens.reduce((s, i) => s + doces.get(i.doceId).preco * i.quantidade, 0);
+    return itens.reduce((s, i) => s + produtos.get(i.produtoId).preco * i.quantidade, 0);
   }
 
   function desenhar() {
     const itens = carrinho.itens();
     if (!itens.length) {
-      conteudo.innerHTML = '<p class="suave">Seu carrinho está vazio.</p><a class="btn btn-solid theme-primary" href="/">Escolher doces</a>';
+      conteudo.innerHTML = `<p class="suave">Seu carrinho está vazio.</p><a class="btn btn-solid theme-primary" href="/">Escolher ${plural}</a>`;
       return;
     }
     conteudo.innerHTML = `
       <div class="row g-7">
         <div class="col-12 lg:col-7">
           ${itens.map((item, i) => {
-            const d = doces.get(item.doceId);
+            const d = produtos.get(item.produtoId);
             return `
             <div class="item-carrinho">
               ${fotoHtml(d)}
               <div>
-                <a class="fw-semibold" href="/doce/${esc(d.slug)}">${esc(d.nome)}</a>
+                <a class="fw-semibold" href="/produto/${esc(d.slug)}">${esc(d.nome)}</a>
                 <div class="suave fs-sm">${brl(d.preco)} / ${esc(d.unidade)}</div>
                 ${item.observacoes ? `<div class="fs-sm mt-1"><strong>Alterações:</strong> ${esc(item.observacoes)}</div>` : ''}
               </div>
@@ -165,7 +166,7 @@ App.pronto.then(async ({ loja, admin, cliente }) => {
           <div class="d-flex flex-wrap gap-3 justify-content-center">
             ${loja.whatsapp ? `<a class="btn btn-solid theme-primary" href="${esc(App.linkWhats(loja.whatsapp, mensagem))}" target="_blank" rel="noopener">Avisar pelo WhatsApp</a>` : ''}
             ${cliente ? '<a class="btn btn-outline theme-primary" href="/conta">Ver meus pedidos</a>' : ''}
-            <a class="btn btn-outline theme-primary" href="/">Voltar aos doces</a>
+            <a class="btn btn-outline theme-primary" href="/">Voltar para ${plural}</a>
           </div>
         </div>`;
     } catch (erro) {

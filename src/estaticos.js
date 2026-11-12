@@ -9,7 +9,7 @@ const { UPLOADS_DIR } = require('./imagens');
 
 const PAGINAS = [
   [/^\/$/, 'index.html'],
-  [/^\/doce\/[a-z0-9-]+$/, 'doce.html'],
+  [/^\/produto\/[a-z0-9-]+$/, 'produto.html'],
   [/^\/sobre$/, 'sobre.html'],
   [/^\/carrinho$/, 'carrinho.html'],
   [/^\/login$/, 'login.html'],
@@ -41,7 +41,20 @@ function enviarArquivo404(res) {
   res.end('<!doctype html><meta charset="utf-8"><title>Não encontrado</title><p style="font-family:sans-serif;padding:2rem">Página não encontrada. <a href="/">Voltar ao início</a></p>');
 }
 
-function servirEstatico(caminho, res) {
+// Endereços antigos que continuam valendo: links já compartilhados (WhatsApp, Instagram, favoritos) não podem quebrar.
+// [endereço antigo, novo]; o que casar com (...) é reaproveitado em $1.
+const REDIRECIONAMENTOS = [
+  [/^\/doce\/([a-z0-9-]+)$/, '/produto/$1'],
+];
+
+// `consulta` é o que vem depois do "?" no endereço (com o "?"), mantido ao redirecionar.
+function servirEstatico(caminho, res, consulta = '') {
+  const antigo = REDIRECIONAMENTOS.find(([re]) => re.test(caminho));
+  if (antigo) {
+    res.writeHead(301, { Location: caminho.replace(antigo[0], antigo[1]) + consulta, ...CABECALHOS_SEGURANCA });
+    return res.end();
+  }
+
   const pagina = PAGINAS.find(([re]) => re.test(caminho));
   if (pagina) return enviarArquivo(res, path.join(RAIZ, 'pages', pagina[1]));
 

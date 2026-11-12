@@ -1,27 +1,32 @@
 'use strict';
-// Página inicial: capa + grade de doces.
+// Página inicial: capa + grade de produtos.
 
-App.pronto.then(async ({ loja, admin }) => {
-  const { esc, brl, fotoHtml } = App;
+App.pronto.then(async ({ loja, admin, catalogo }) => {
+  const { esc, brl, fotoHtml, minusculas } = App;
   document.title = loja.nome;
   document.getElementById('capa-titulo').textContent = loja.nome;
   document.getElementById('capa-slogan').textContent = loja.slogan;
-  document.getElementById('novo-doce').hidden = !admin;
+  // A loja escolhe como chamar o que vende (doces, pratos, produtos...): os textos seguem essa escolha.
+  document.getElementById('ver-produtos').textContent = `Ver ${minusculas(catalogo.nomePlural)}`;
+  document.getElementById('titulo-produtos').textContent = catalogo.nomePlural;
+  const novo = document.getElementById('novo-produto');
+  novo.textContent = `+ Adicionar ${minusculas(catalogo.nomeSingular)}`;
+  novo.hidden = !admin;
 
   const grade = document.getElementById('grade');
-  const doces = await App.api('/api/doces');
-  if (!doces.length) {
+  const produtos = await App.api('/api/produtos');
+  if (!produtos.length) {
     grade.outerHTML = '<p class="suave">Em breve, novidades por aqui.</p>';
     return;
   }
-  grade.innerHTML = doces.map((d) => `
-    <a class="doce-card${d.disponivel ? '' : ' indisponivel'}" href="/doce/${esc(d.slug)}">
-      ${fotoHtml(d)}
+  grade.innerHTML = produtos.map((p) => `
+    <a class="produto-card${p.disponivel ? '' : ' indisponivel'}" href="/produto/${esc(p.slug)}">
+      ${fotoHtml(p)}
       <div class="corpo">
-        <h3>${esc(d.nome)}</h3>
-        <span class="suave fs-sm">${esc(d.unidade)}</span>
-        ${d.disponivel ? '' : '<span><span class="selo cinza">Oculto para clientes</span></span>'}
-        <span class="preco">${brl(d.preco)}</span>
+        <h3>${esc(p.nome)}</h3>
+        <span class="suave fs-sm">${esc(p.unidade)}</span>
+        ${p.disponivel ? '' : '<span><span class="selo cinza">Oculto para clientes</span></span>'}
+        <span class="preco">${brl(p.preco)}</span>
       </div>
     </a>`).join('');
 }).catch((erro) => App.aviso(erro.message, { erro: true }));

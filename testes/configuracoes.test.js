@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const { subirServidor, dadosCliente, hojeLocal } = require('./apoio');
 const { diaNoFuso, somarDias, instanteAntesDoDia, fusoValido } = require('../src/datas');
 
-let servidor, loja, visitante, cliente, dados, doces;
+let servidor, loja, visitante, cliente, dados, produtos;
 before(async () => {
   servidor = await subirServidor();
   loja = servidor.navegador();
@@ -15,13 +15,13 @@ before(async () => {
   cliente = servidor.navegador();
   dados = dadosCliente();
   await cliente.post('/api/cadastro', dados);
-  doces = (await loja.get('/api/doces')).dados;
+  produtos = (await loja.get('/api/produtos')).dados;
 });
 after(() => servidor.parar());
 
 const pedidoPara = (data) => ({
   cliente: { nome: dados.nome, telefone: dados.telefone }, entrega: { tipo: 'retirada', data },
-  itens: [{ doceId: doces[0].id, quantidade: 1 }],
+  itens: [{ produtoId: produtos[0].id, quantidade: 1 }],
 });
 
 test('datas: o dia depende do fuso da loja, não do servidor', () => {
@@ -39,7 +39,7 @@ test('datas: o dia depende do fuso da loja, não do servidor', () => {
 
 test('visitante recebe só as seções públicas', async () => {
   const r = await visitante.get('/api/site');
-  assert.deepEqual(Object.keys(r.dados).sort(), ['admin', 'cliente', 'loja', 'sobre']);
+  assert.deepEqual(Object.keys(r.dados).sort(), ['admin', 'catalogo', 'cliente', 'loja', 'sobre']);
   assert.doesNotMatch(r.texto, /hash|salt|usuario|fusoHorario/);
 });
 
@@ -48,7 +48,7 @@ test('painel lê as seções editáveis, e nunca a conta de acesso', async () =>
   assert.equal((await cliente.get('/api/configuracoes')).status, 401);
   const r = await loja.get('/api/configuracoes');
   assert.equal(r.status, 200);
-  assert.deepEqual(Object.keys(r.dados).sort(), ['loja', 'operacao', 'sobre']);
+  assert.deepEqual(Object.keys(r.dados).sort(), ['catalogo', 'loja', 'operacao', 'sobre']);
   assert.deepEqual(r.dados.operacao, { fusoHorario: 'America/Sao_Paulo' }); // padrão, sem nada gravado no banco
   assert.doesNotMatch(r.texto, /hash|salt|confeiteira"/);
 });
@@ -98,6 +98,6 @@ test('resumo do painel usa os dias do fuso da loja', async () => {
     // Os dois pedidos acabaram de ser feitos: caem no último dia, seja qual for o fuso.
     assert.equal(r.kpis.pedidos, 2, fuso);
     assert.equal(r.serie.at(-1).pedidos, 2, fuso);
-    assert.equal(r.kpis.receita, doces[0].preco * 2, fuso);
+    assert.equal(r.kpis.receita, produtos[0].preco * 2, fuso);
   }
 });

@@ -5,14 +5,14 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { subirServidor, dadosCliente, hojeLocal } = require('./apoio');
 
-let servidor, loja, cliente, dados, doces;
+let servidor, loja, cliente, dados, produtos;
 
 const ENDERECO = { cep: '01001-000', rua: 'Praça da Sé', numero: '10', complemento: 'apto 2', bairro: 'Sé', cidade: 'São Paulo', uf: 'SP' };
 function corpoPedido(extra = {}) {
   return {
     cliente: { nome: dados.nome, telefone: dados.telefone },
     entrega: { tipo: 'retirada', data: hojeLocal(1) },
-    itens: [{ doceId: doces[0].id, quantidade: 2, observacoes: 'sem granulado' }, { doceId: doces[1].id, quantidade: 1 }],
+    itens: [{ produtoId: produtos[0].id, quantidade: 2, observacoes: 'sem granulado' }, { produtoId: produtos[1].id, quantidade: 1 }],
     observacoes: 'Tocar a campainha', ...extra,
   };
 }
@@ -24,7 +24,7 @@ before(async () => {
   cliente = servidor.navegador();
   dados = dadosCliente();
   await cliente.post('/api/cadastro', dados);
-  doces = (await loja.get('/api/doces')).dados;
+  produtos = (await loja.get('/api/produtos')).dados;
 });
 after(() => servidor.parar());
 
@@ -42,7 +42,7 @@ test('pedido válido recebe número e total calculado pelo servidor', async () =
   const r = await cliente.post('/api/pedidos', corpo);
   assert.equal(r.status, 200);
   assert.equal(r.dados.numero, 1);
-  assert.equal(r.dados.total, doces[0].preco * 2 + doces[1].preco);
+  assert.equal(r.dados.total, produtos[0].preco * 2 + produtos[1].preco);
 
   const [pedido] = (await loja.get('/api/pedidos')).dados;
   assert.equal(pedido.numero, 1);
@@ -52,8 +52,8 @@ test('pedido válido recebe número e total calculado pelo servidor', async () =
   assert.deepEqual(pedido.entrega, { tipo: 'retirada', data: hojeLocal(1), endereco: '' });
   assert.equal(pedido.observacoes, 'Tocar a campainha');
   assert.deepEqual(pedido.itens.map((i) => [i.nome, i.precoUnit, i.quantidade, i.observacoes]), [
-    [doces[0].nome, doces[0].preco, 2, 'sem granulado'],
-    [doces[1].nome, doces[1].preco, 1, ''],
+    [produtos[0].nome, produtos[0].preco, 2, 'sem granulado'],
+    [produtos[1].nome, produtos[1].preco, 1, ''],
   ]);
   assert.ok(!Number.isNaN(Date.parse(pedido.criadoEm)));
 });
@@ -71,10 +71,10 @@ test('pedido com entrega exige endereço, grava-o formatado e guarda no cadastro
 test('pedidos inválidos são recusados', async () => {
   const casos = [
     [corpoPedido({ itens: [] }), 400],
-    [corpoPedido({ itens: [{ doceId: doces[0].id, quantidade: 0 }] }), 400],
-    [corpoPedido({ itens: [{ doceId: doces[0].id, quantidade: 1.5 }] }), 400],
-    [corpoPedido({ itens: [{ doceId: doces[0].id, quantidade: 1000 }] }), 400],
-    [corpoPedido({ itens: [{ doceId: '00000000-0000-0000-0000-000000000000', quantidade: 1 }] }), 409],
+    [corpoPedido({ itens: [{ produtoId: produtos[0].id, quantidade: 0 }] }), 400],
+    [corpoPedido({ itens: [{ produtoId: produtos[0].id, quantidade: 1.5 }] }), 400],
+    [corpoPedido({ itens: [{ produtoId: produtos[0].id, quantidade: 1000 }] }), 400],
+    [corpoPedido({ itens: [{ produtoId: '00000000-0000-0000-0000-000000000000', quantidade: 1 }] }), 409],
     [corpoPedido({ entrega: { tipo: 'retirada', data: hojeLocal(-1) } }), 400],
     [corpoPedido({ entrega: { tipo: 'retirada', data: 'amanhã' } }), 400],
     [corpoPedido({ cliente: { nome: '', telefone: dados.telefone } }), 400],
@@ -87,11 +87,11 @@ test('pedidos inválidos são recusados', async () => {
   assert.equal((await loja.get('/api/pedidos')).dados.length, 2, 'nenhum pedido inválido deveria ter sido gravado');
 });
 
-test('doce indisponível não pode ser pedido', async () => {
-  const alvo = doces[2];
-  await loja.put(`/api/doces/${alvo.id}`, { disponivel: false });
-  assert.equal((await cliente.post('/api/pedidos', corpoPedido({ itens: [{ doceId: alvo.id, quantidade: 1 }] }))).status, 409);
-  await loja.put(`/api/doces/${alvo.id}`, { disponivel: true });
+test('produto indisponível não pode ser pedido', async () => {
+  const alvo = produtos[2];
+  await loja.put(`/api/produtos/${alvo.id}`, { disponivel: false });
+  assert.equal((await cliente.post('/api/pedidos', corpoPedido({ itens: [{ produtoId: alvo.id, quantidade: 1 }] }))).status, 409);
+  await loja.put(`/api/produtos/${alvo.id}`, { disponivel: true });
 });
 
 test('cliente vê só os próprios pedidos, sem dados internos', async () => {
@@ -125,12 +125,12 @@ test('mudança de status: só a loja, só status conhecidos', async () => {
   assert.equal((await cliente.get('/api/conta/pedidos')).dados.find((p) => p.numero === 1).status, 'entregue');
 });
 
-test('pedido guarda nome e preço da época, mesmo que o doce mude ou seja apagado', async () => {
-  const novo = (await loja.post('/api/doces', { nome: 'Doce Passageiro', preco: 700 })).dados;
-  const r = await cliente.post('/api/pedidos', corpoPedido({ itens: [{ doceId: novo.id, quantidade: 3 }] }));
+test('pedido guarda nome e preço da época, mesmo que o produto mude ou seja apagado', async () => {
+  const novo = (await loja.post('/api/produtos', { nome: 'Doce Passageiro', preco: 700 })).dados;
+  const r = await cliente.post('/api/pedidos', corpoPedido({ itens: [{ produtoId: novo.id, quantidade: 3 }] }));
   assert.equal(r.dados.total, 2100);
-  await loja.put(`/api/doces/${novo.id}`, { preco: 9900, nome: 'Outro Nome' });
-  await loja.delete(`/api/doces/${novo.id}`);
+  await loja.put(`/api/produtos/${novo.id}`, { preco: 9900, nome: 'Outro Nome' });
+  await loja.delete(`/api/produtos/${novo.id}`);
   const pedido = (await loja.get('/api/pedidos')).dados.find((p) => p.numero === r.dados.numero);
   assert.equal(pedido.total, 2100);
   assert.deepEqual([pedido.itens[0].nome, pedido.itens[0].precoUnit], ['Doce Passageiro', 700]);
@@ -167,7 +167,7 @@ test('resumo: receita, pedidos e status do período', async () => {
   assert.equal(r.status.entregue, 1);
   assert.equal(r.serie.at(-1).data, hojeLocal());
   assert.equal(r.serie.at(-1).receita, r.kpis.receita);
-  assert.ok(r.topDoces.length >= 1 && r.topDoces.length <= 6);
+  assert.ok(r.topProdutos.length >= 1 && r.topProdutos.length <= 6);
   // Período fora da lista permitida cai no padrão de 30 dias.
   assert.equal((await loja.get('/api/dashboard?dias=999')).dados.dias, 30);
 });

@@ -49,10 +49,10 @@ sudo cp /opt/confeitaria/deploy/confeitaria.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now confeitaria
 sudo systemctl status confeitaria
-curl -s localhost:3000/api/doces | head -c 100
+curl -s localhost:3000/api/produtos | head -c 100
 ```
 
-O `curl` precisa devolver a lista de doces. Os dados ficam em `/var/lib/confeitaria`.
+O `curl` precisa devolver a lista de produtos. Os dados ficam em `/var/lib/confeitaria`.
 
 ## 6. HTTPS com o Caddy
 

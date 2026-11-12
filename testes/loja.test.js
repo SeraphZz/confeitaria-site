@@ -1,5 +1,5 @@
 'use strict';
-// O que a loja faz logada: doces (cadastro, foto, disponibilidade), página Sobre, dados da loja e senha.
+// O que a loja faz logada: produtos (cadastro, foto, disponibilidade), página Sobre, dados da loja e senha.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -19,8 +19,8 @@ after(() => servidor.parar());
 test('rotas da loja exigem login de admin', async () => {
   const id = '00000000-0000-0000-0000-000000000000';
   const tentativas = [
-    ['POST', '/api/doces', { nome: 'X', preco: 1 }], ['PUT', `/api/doces/${id}`, { nome: 'X' }], ['DELETE', `/api/doces/${id}`],
-    ['PUT', `/api/doces/${id}/imagem`, { imagem: PNG_1X1 }], ['PUT', '/api/sobre', { titulo: 'X', trajetoria: [] }],
+    ['POST', '/api/produtos', { nome: 'X', preco: 1 }], ['PUT', `/api/produtos/${id}`, { nome: 'X' }], ['DELETE', `/api/produtos/${id}`],
+    ['PUT', `/api/produtos/${id}/imagem`, { imagem: PNG_1X1 }], ['PUT', '/api/sobre', { titulo: 'X', trajetoria: [] }],
     ['PUT', '/api/sobre/imagem', { imagem: PNG_1X1 }], ['PUT', '/api/loja', { nome: 'X' }], ['PUT', '/api/senha', { atual: 'a', nova: 'b' }],
     ['GET', '/api/pedidos'], ['GET', '/api/clientes'], ['GET', '/api/dashboard'], ['PATCH', `/api/pedidos/${id}`, { status: 'novo' }],
   ];
@@ -29,73 +29,73 @@ test('rotas da loja exigem login de admin', async () => {
   }
 });
 
-test('doces: criar, editar, ocultar e excluir', async (t) => {
-  let doce;
+test('produtos: criar, editar, ocultar e excluir', async (t) => {
+  let produto;
   await t.test('criar gera slug sem acento e sem repetir', async () => {
-    const r = await loja.post('/api/doces', { nome: 'Pão de Mel Açucarado', preco: 850 });
+    const r = await loja.post('/api/produtos', { nome: 'Pão de Mel Açucarado', preco: 850 });
     assert.equal(r.status, 200);
-    doce = r.dados;
-    assert.equal(doce.slug, 'pao-de-mel-acucarado');
-    assert.equal(doce.preco, 850);
-    assert.equal(doce.disponivel, true);
-    assert.equal((await loja.post('/api/doces', { nome: 'Pão de mel açucarado', preco: 900 })).dados.slug, 'pao-de-mel-acucarado-2');
+    produto = r.dados;
+    assert.equal(produto.slug, 'pao-de-mel-acucarado');
+    assert.equal(produto.preco, 850);
+    assert.equal(produto.disponivel, true);
+    assert.equal((await loja.post('/api/produtos', { nome: 'Pão de mel açucarado', preco: 900 })).dados.slug, 'pao-de-mel-acucarado-2');
   });
 
   await t.test('validação de nome e preço', async () => {
-    assert.equal((await loja.post('/api/doces', { nome: '', preco: 100 })).status, 400);
-    assert.equal((await loja.post('/api/doces', { nome: 'x'.repeat(81), preco: 100 })).status, 400);
-    assert.equal((await loja.put(`/api/doces/${doce.id}`, { preco: -1 })).status, 400);
-    assert.equal((await loja.put(`/api/doces/${doce.id}`, { preco: 12.5 })).status, 400);
-    assert.equal((await loja.put(`/api/doces/${doce.id}`, { preco: '100' })).status, 400);
+    assert.equal((await loja.post('/api/produtos', { nome: '', preco: 100 })).status, 400);
+    assert.equal((await loja.post('/api/produtos', { nome: 'x'.repeat(81), preco: 100 })).status, 400);
+    assert.equal((await loja.put(`/api/produtos/${produto.id}`, { preco: -1 })).status, 400);
+    assert.equal((await loja.put(`/api/produtos/${produto.id}`, { preco: 12.5 })).status, 400);
+    assert.equal((await loja.put(`/api/produtos/${produto.id}`, { preco: '100' })).status, 400);
   });
 
   await t.test('editar muda só os campos enviados e mantém o slug', async () => {
-    const r = await loja.put(`/api/doces/${doce.id}`, { descricao: 'Com <b>mel</b> de verdade', unidade: 'caixa com 4' });
+    const r = await loja.put(`/api/produtos/${produto.id}`, { descricao: 'Com <b>mel</b> de verdade', unidade: 'caixa com 4' });
     assert.equal(r.status, 200);
     assert.equal(r.dados.nome, 'Pão de Mel Açucarado');
     assert.equal(r.dados.descricao, 'Com <b>mel</b> de verdade'); // guardado como texto; quem escapa é a página
     assert.equal(r.dados.unidade, 'caixa com 4');
-    assert.equal(r.dados.slug, doce.slug);
-    assert.equal((await loja.put('/api/doces/00000000-0000-0000-0000-000000000000', { nome: 'X' })).status, 404);
+    assert.equal(r.dados.slug, produto.slug);
+    assert.equal((await loja.put('/api/produtos/00000000-0000-0000-0000-000000000000', { nome: 'X' })).status, 404);
   });
 
-  await t.test('doce oculto some para o público e continua para a loja', async () => {
-    await loja.put(`/api/doces/${doce.id}`, { disponivel: false });
-    assert.ok(!(await visitante.get('/api/doces')).dados.some((d) => d.id === doce.id));
-    assert.equal((await visitante.get(`/api/doces/${doce.slug}`)).status, 404);
-    assert.ok((await loja.get('/api/doces')).dados.some((d) => d.id === doce.id));
-    assert.equal((await loja.get(`/api/doces/${doce.slug}`)).status, 200);
+  await t.test('produto oculto some para o público e continua para a loja', async () => {
+    await loja.put(`/api/produtos/${produto.id}`, { disponivel: false });
+    assert.ok(!(await visitante.get('/api/produtos')).dados.some((d) => d.id === produto.id));
+    assert.equal((await visitante.get(`/api/produtos/${produto.slug}`)).status, 404);
+    assert.ok((await loja.get('/api/produtos')).dados.some((d) => d.id === produto.id));
+    assert.equal((await loja.get(`/api/produtos/${produto.slug}`)).status, 200);
   });
 
   await t.test('foto: aceita imagem de verdade, recusa o resto e apaga o arquivo antigo', async () => {
-    const semFoto = await loja.put(`/api/doces/${doce.id}/imagem`, { imagem: 'data:image/png;base64,' + Buffer.from('isto não é png').toString('base64') });
+    const semFoto = await loja.put(`/api/produtos/${produto.id}/imagem`, { imagem: 'data:image/png;base64,' + Buffer.from('isto não é png').toString('base64') });
     assert.equal(semFoto.status, 400);
-    assert.equal((await loja.put(`/api/doces/${doce.id}/imagem`, { imagem: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=' })).status, 400);
-    assert.equal((await loja.put(`/api/doces/${doce.id}/imagem`, { imagem: 'data:text/html;base64,PGgxPg==' })).status, 400);
+    assert.equal((await loja.put(`/api/produtos/${produto.id}/imagem`, { imagem: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=' })).status, 400);
+    assert.equal((await loja.put(`/api/produtos/${produto.id}/imagem`, { imagem: 'data:text/html;base64,PGgxPg==' })).status, 400);
 
-    const r1 = await loja.put(`/api/doces/${doce.id}/imagem`, { imagem: PNG_1X1 });
+    const r1 = await loja.put(`/api/produtos/${produto.id}/imagem`, { imagem: PNG_1X1 });
     assert.equal(r1.status, 200);
-    assert.match(r1.dados.imagem, new RegExp(`^/uploads/${doce.id}-\\d+\\.png$`));
+    assert.match(r1.dados.imagem, new RegExp(`^/uploads/${produto.id}-\\d+\\.png$`));
     const foto = await visitante.get(r1.dados.imagem);
     assert.equal(foto.status, 200);
     assert.equal(foto.cabecalhos.get('content-type'), 'image/png');
 
     await new Promise((resolve) => setTimeout(resolve, 5)); // o nome do arquivo leva o horário
-    const r2 = await loja.put(`/api/doces/${doce.id}/imagem`, { imagem: PNG_1X1 });
+    const r2 = await loja.put(`/api/produtos/${produto.id}/imagem`, { imagem: PNG_1X1 });
     assert.notEqual(r2.dados.imagem, r1.dados.imagem);
     assert.equal((await visitante.get(r1.dados.imagem)).status, 404);
 
-    const r3 = await loja.put(`/api/doces/${doce.id}/imagem`, { imagem: '' });
+    const r3 = await loja.put(`/api/produtos/${produto.id}/imagem`, { imagem: '' });
     assert.equal(r3.dados.imagem, '');
     assert.deepEqual(fs.readdirSync(path.join(servidor.pasta, 'uploads')), []);
   });
 
-  await t.test('excluir remove o doce e a foto', async () => {
-    const comFoto = await loja.put(`/api/doces/${doce.id}/imagem`, { imagem: PNG_1X1 });
-    assert.equal((await loja.delete(`/api/doces/${doce.id}`)).status, 200);
-    assert.ok(!(await loja.get('/api/doces')).dados.some((d) => d.id === doce.id));
+  await t.test('excluir remove o produto e a foto', async () => {
+    const comFoto = await loja.put(`/api/produtos/${produto.id}/imagem`, { imagem: PNG_1X1 });
+    assert.equal((await loja.delete(`/api/produtos/${produto.id}`)).status, 200);
+    assert.ok(!(await loja.get('/api/produtos')).dados.some((d) => d.id === produto.id));
     assert.equal((await visitante.get(comFoto.dados.imagem)).status, 404);
-    assert.equal((await loja.delete(`/api/doces/${doce.id}`)).status, 404);
+    assert.equal((await loja.delete(`/api/produtos/${produto.id}`)).status, 404);
   });
 });
 

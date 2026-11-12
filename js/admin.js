@@ -1,9 +1,9 @@
 'use strict';
-// Painel da confeiteira: resumo com gráficos, pedidos, doces e configurações.
+// Painel da loja: resumo com gráficos, pedidos, clientes, produtos e configurações.
 
-App.pronto.then(async ({ loja, admin }) => {
+App.pronto.then(async ({ loja, admin, catalogo }) => {
   if (!admin) return location.replace('/login');
-  const { esc, brl, dataBr, api, aviso } = App;
+  const { esc, brl, dataBr, api, aviso, minusculas } = App;
   const el = (id) => document.getElementById(id);
   document.title = `Painel · ${loja.nome}`;
 
@@ -13,11 +13,17 @@ App.pronto.then(async ({ loja, admin }) => {
   const COR_GRADE = '#f3e3e7';
 
   // ------------------------------------------------------------ abas
-  const ABAS = ['resumo', 'pedidos', 'clientes', 'doces', 'config'];
-  const carregar = { resumo: carregarResumo, pedidos: carregarPedidos, clientes: carregarClientes, doces: carregarDoces, config: carregarConfig };
+  const ABAS = ['resumo', 'pedidos', 'clientes', 'produtos', 'config'];
+  const carregar = { resumo: carregarResumo, pedidos: carregarPedidos, clientes: carregarClientes, produtos: carregarProdutos, config: carregarConfig };
+
+  // A loja escolhe como chamar o que vende (doces, pratos, produtos...): os textos do painel seguem essa escolha.
+  document.querySelector('[data-aba=produtos]').textContent = catalogo.nomePlural;
+  el('titulo-grafico-produtos').textContent = `${catalogo.nomePlural} que mais renderam`;
+  el('titulo-novo-produto').textContent = `Adicionar ${minusculas(catalogo.nomeSingular)}`;
 
   function abrirAba() {
-    const aba = ABAS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'resumo';
+    const pedida = location.hash.slice(1) === 'doces' ? 'produtos' : location.hash.slice(1); // #doces: endereço antigo da aba
+    const aba = ABAS.includes(pedida) ? pedida : 'resumo';
     for (const nome of ABAS) {
       el(`aba-${nome}`).hidden = nome !== aba;
       document.querySelector(`[data-aba=${nome}]`).setAttribute('aria-selected', nome === aba);
@@ -91,16 +97,16 @@ App.pronto.then(async ({ loja, admin }) => {
         ${comVenda.map((d) => `<tr><td>${dataBr(d.data)}</td><td>${d.pedidos}</td><td>${brl(d.receita)}</td></tr>`).join('')}
       </tbody></table>` : '<p class="suave fs-sm mb-0">Nenhuma venda no período.</p>';
 
-    desenharBarras('grafico-doces', {
+    desenharBarras('grafico-produtos', {
       horizontal: true,
-      rotulos: r.topDoces.map((d) => (d.nome.length > 18 ? d.nome.slice(0, 17) + '…' : d.nome)),
-      titulos: r.topDoces.map((d) => d.nome),
-      valores: r.topDoces.map((d) => d.receita),
-      extra: (i) => `${r.topDoces[i].quantidade} vendido(s)`,
+      rotulos: r.topProdutos.map((d) => (d.nome.length > 18 ? d.nome.slice(0, 17) + '…' : d.nome)),
+      titulos: r.topProdutos.map((d) => d.nome),
+      valores: r.topProdutos.map((d) => d.receita),
+      extra: (i) => `${r.topProdutos[i].quantidade} vendido(s)`,
     });
-    el('tabela-doces').innerHTML = r.topDoces.length ? `
-      <table class="tabela-simples"><thead><tr><th>Doce</th><th>Qtd.</th><th>Receita</th></tr></thead><tbody>
-        ${r.topDoces.map((d) => `<tr><td>${esc(d.nome)}</td><td>${d.quantidade}</td><td>${brl(d.receita)}</td></tr>`).join('')}
+    el('tabela-produtos').innerHTML = r.topProdutos.length ? `
+      <table class="tabela-simples"><thead><tr><th>${esc(catalogo.nomeSingular)}</th><th>Qtd.</th><th>Receita</th></tr></thead><tbody>
+        ${r.topProdutos.map((d) => `<tr><td>${esc(d.nome)}</td><td>${d.quantidade}</td><td>${brl(d.receita)}</td></tr>`).join('')}
       </tbody></table>` : '<p class="suave fs-sm mb-0">Nenhuma venda no período.</p>';
   }
 
@@ -197,43 +203,43 @@ App.pronto.then(async ({ loja, admin }) => {
   }
   el('busca-cliente').addEventListener('input', desenharClientes);
 
-  // ------------------------------------------------------------ doces
-  async function carregarDoces() {
-    const doces = await api('/api/doces');
-    el('lista-doces').innerHTML = doces.length ? doces.map((d) => `
-      <div class="linha-doce">
+  // ------------------------------------------------------------ produtos
+  async function carregarProdutos() {
+    const produtos = await api('/api/produtos');
+    el('lista-produtos').innerHTML = produtos.length ? produtos.map((d) => `
+      <div class="linha-produto">
         <span class="nome">${esc(d.emoji)} ${esc(d.nome)} <span class="suave fw-normal">· ${brl(d.preco)}</span></span>
         <label class="d-flex gap-2 align-items-center fs-sm"><input type="checkbox" data-disponivel="${d.id}" ${d.disponivel ? 'checked' : ''}> Disponível</label>
-        <a class="btn btn-outline theme-primary btn-sm" href="/doce/${esc(d.slug)}?editar">Editar</a>
+        <a class="btn btn-outline theme-primary btn-sm" href="/produto/${esc(d.slug)}?editar">Editar</a>
         <button type="button" class="botao-texto" data-excluir="${d.id}" data-nome="${esc(d.nome)}">Excluir</button>
-      </div>`).join('') : '<p class="suave mb-0">Nenhum doce cadastrado ainda.</p>';
+      </div>`).join('') : '<p class="suave mb-0">Nada cadastrado ainda.</p>';
   }
 
-  el('lista-doces').addEventListener('change', async (evento) => {
+  el('lista-produtos').addEventListener('change', async (evento) => {
     const id = evento.target.dataset.disponivel;
     if (!id) return;
     try {
-      await api(`/api/doces/${id}`, { metodo: 'PUT', corpo: { disponivel: evento.target.checked } });
-      aviso(evento.target.checked ? 'Doce visível para os clientes.' : 'Doce oculto para os clientes.');
+      await api(`/api/produtos/${id}`, { metodo: 'PUT', corpo: { disponivel: evento.target.checked } });
+      aviso(evento.target.checked ? 'Visível para os clientes.' : 'Oculto para os clientes.');
     } catch (erro) { tratarErro(erro); }
   });
 
-  el('lista-doces').addEventListener('click', async (evento) => {
+  el('lista-produtos').addEventListener('click', async (evento) => {
     const { excluir, nome } = evento.target.dataset;
     if (!excluir || !confirm(`Excluir "${nome}"? Os pedidos antigos continuam guardados.`)) return;
     try {
-      await api(`/api/doces/${excluir}`, { metodo: 'DELETE' });
-      await carregarDoces();
+      await api(`/api/produtos/${excluir}`, { metodo: 'DELETE' });
+      await carregarProdutos();
     } catch (erro) { tratarErro(erro); }
   });
 
-  el('form-novo-doce').addEventListener('submit', async (evento) => {
+  el('form-novo-produto').addEventListener('submit', async (evento) => {
     evento.preventDefault();
     const preco = App.lerPreco(el('novo-preco').value);
     if (preco === null) return aviso('Preço inválido. Use o formato 12,50.', { erro: true });
     try {
-      const doce = await api('/api/doces', { metodo: 'POST', corpo: { nome: el('novo-nome').value, preco } });
-      location.href = `/doce/${doce.slug}?editar`;
+      const produto = await api('/api/produtos', { metodo: 'POST', corpo: { nome: el('novo-nome').value, preco } });
+      location.href = `/produto/${produto.slug}?editar`;
     } catch (erro) { tratarErro(erro); }
   });
 
@@ -241,10 +247,21 @@ App.pronto.then(async ({ loja, admin }) => {
   const CAMPOS_LOJA = ['nome', 'slogan', 'whatsapp', 'instagram', 'email', 'cidade'];
   let dadosLoja = loja;
 
+  const CAMPOS_CATALOGO = ['nomeSingular', 'nomePlural', 'emojiPadrao'];
+
   async function carregarConfig() {
     for (const campo of CAMPOS_LOJA) el(`loja-${campo}`).value = dadosLoja[campo] || '';
     el('loja-whatsapp').value = App.formatarTelefone(dadosLoja.whatsapp);
+    for (const campo of CAMPOS_CATALOGO) el(`catalogo-${campo}`).value = catalogo[campo] || '';
   }
+
+  el('form-catalogo').addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    try {
+      await api('/api/configuracoes/catalogo', { metodo: 'PUT', corpo: Object.fromEntries(CAMPOS_CATALOGO.map((c) => [c, el(`catalogo-${c}`).value])) });
+      location.reload(); // os nomes aparecem no menu, nas abas e nos títulos: recarregar atualiza tudo de uma vez
+    } catch (erro) { tratarErro(erro); }
+  });
 
   App.ligarMascaras(el('form-loja'));
   el('form-loja').addEventListener('submit', async (evento) => {

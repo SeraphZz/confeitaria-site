@@ -60,22 +60,22 @@ function gravarConfig(chave, valor) {
     .run(chave, JSON.stringify(valor));
 }
 
-// ---------------------------------------------------------------- doces
+// ---------------------------------------------------------------- produtos
 
-const paraDoce = (l) => l && {
+const paraProduto = (l) => l && {
   id: l.id, slug: l.slug, nome: l.nome, descricao: l.descricao, preco: l.preco,
   unidade: l.unidade, emoji: l.emoji, imagem: l.imagem, disponivel: Boolean(l.disponivel),
 };
 
-function listarDoces({ soDisponiveis = false } = {}) {
-  return sql(`SELECT * FROM doces ${soDisponiveis ? 'WHERE disponivel = 1' : ''} ORDER BY rowid`).all().map(paraDoce);
+function listarProdutos({ soDisponiveis = false } = {}) {
+  return sql(`SELECT * FROM produtos ${soDisponiveis ? 'WHERE disponivel = 1' : ''} ORDER BY rowid`).all().map(paraProduto);
 }
-const docePorId = (id) => paraDoce(sql('SELECT * FROM doces WHERE id = ?').get(String(id)));
-const docePorSlug = (slug) => paraDoce(sql('SELECT * FROM doces WHERE slug = ?').get(String(slug)));
+const produtoPorId = (id) => paraProduto(sql('SELECT * FROM produtos WHERE id = ?').get(String(id)));
+const produtoPorSlug = (slug) => paraProduto(sql('SELECT * FROM produtos WHERE slug = ?').get(String(slug)));
 
 // Cria ou atualiza (pelo id).
-function salvarDoce(d) {
-  sql(`INSERT INTO doces (id, slug, nome, descricao, preco, unidade, emoji, imagem, disponivel)
+function salvarProduto(d) {
+  sql(`INSERT INTO produtos (id, slug, nome, descricao, preco, unidade, emoji, imagem, disponivel)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (id) DO UPDATE SET slug = excluded.slug, nome = excluded.nome, descricao = excluded.descricao,
          preco = excluded.preco, unidade = excluded.unidade, emoji = excluded.emoji, imagem = excluded.imagem,
@@ -83,8 +83,8 @@ function salvarDoce(d) {
     .run(d.id, d.slug, d.nome, d.descricao, d.preco, d.unidade, d.emoji, d.imagem, d.disponivel ? 1 : 0);
 }
 
-function apagarDoce(id) {
-  sql('DELETE FROM doces WHERE id = ?').run(id);
+function apagarProduto(id) {
+  sql('DELETE FROM produtos WHERE id = ?').run(id);
 }
 
 // ---------------------------------------------------------------- clientes
@@ -125,8 +125,8 @@ function inserirPedido(p) {
         p.entrega.tipo, p.entrega.data, p.entrega.endereco || '', p.observacoes || '', p.total, p.status, p.demo ? 1 : 0);
     const numero = Number(lastInsertRowid);
     for (const i of p.itens) {
-      sql('INSERT INTO pedido_itens (pedido_numero, doce_id, nome, preco_unit, quantidade, observacoes) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(numero, i.doceId || null, i.nome, i.precoUnit, i.quantidade, i.observacoes || '');
+      sql('INSERT INTO pedido_itens (pedido_numero, produto_id, nome, preco_unit, quantidade, observacoes) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(numero, i.produtoId || null, i.nome, i.precoUnit, i.quantidade, i.observacoes || '');
     }
     return numero;
   });
@@ -138,7 +138,7 @@ function buscarPedidos(filtro = '', parametros = []) {
   const linhasItens = sql(`SELECT i.* FROM pedido_itens i JOIN pedidos p ON p.numero = i.pedido_numero ${filtro} ORDER BY i.rowid`).all(...parametros);
   for (const i of linhasItens) {
     if (!itens.has(i.pedido_numero)) itens.set(i.pedido_numero, []);
-    itens.get(i.pedido_numero).push({ doceId: i.doce_id, nome: i.nome, precoUnit: i.preco_unit, quantidade: i.quantidade, observacoes: i.observacoes });
+    itens.get(i.pedido_numero).push({ produtoId: i.produto_id, nome: i.nome, precoUnit: i.preco_unit, quantidade: i.quantidade, observacoes: i.observacoes });
   }
   return sql(`SELECT p.* FROM pedidos p ${filtro} ORDER BY p.criado_em, p.numero`).all(...parametros).map((p) => ({
     id: p.id, numero: p.numero, criadoEm: p.criado_em, clienteId: p.cliente_id,
@@ -181,14 +181,17 @@ function importarJsonAntigo() {
 
   transacao(() => {
     for (const chave of ['loja', 'sobre', 'admin']) gravarConfig(chave, antigo[chave]);
-    for (const d of antigo.doces || []) salvarDoce(d);
+    for (const d of antigo.doces || []) salvarProduto(d); // no arquivo antigo a lista se chama "doces"
     for (const c of clientes) {
       // Nos primeiros bancos o endereço era um texto só: ele vai para o campo "rua".
       const endereco = c.endereco && typeof c.endereco === 'object' ? c.endereco : { rua: String(c.endereco || '') };
       salvarCliente({ ...c, endereco, criadoEm: c.criadoEm || new Date().toISOString() });
     }
     const idsClientes = new Set(clientes.map((c) => c.id));
-    for (const p of pedidos) inserirPedido({ ...p, clienteId: idsClientes.has(p.clienteId) ? p.clienteId : null });
+    for (const p of pedidos) {
+      const itens = (p.itens || []).map((i) => ({ ...i, produtoId: i.produtoId || i.doceId })); // idem: "doceId"
+      inserirPedido({ ...p, itens, clienteId: idsClientes.has(p.clienteId) ? p.clienteId : null });
+    }
 
     // A numeração continua de onde parou, mesmo que os últimos pedidos tenham sido apagados.
     const ultimo = Math.max((antigo.proximoNumero || 1) - 1, ...pedidos.map((p) => p.numero));
@@ -197,14 +200,14 @@ function importarJsonAntigo() {
   });
 
   fs.renameSync(JSON_ANTIGO, JSON_ANTIGO + '.migrado');
-  console.log(`Dados migrados de db.json para loja.db: ${(antigo.doces || []).length} doces, ${clientes.length} clientes, ${pedidos.length} pedidos.`);
+  console.log(`Dados migrados de db.json para loja.db: ${(antigo.doces || []).length} produtos, ${clientes.length} clientes, ${pedidos.length} pedidos.`);
   console.log('O arquivo antigo ficou guardado como data/db.json.migrado.');
 }
 importarJsonAntigo();
 
 module.exports = {
   DATA_DIR, ARQUIVO, transacao, lerConfig, gravarConfig,
-  listarDoces, docePorId, docePorSlug, salvarDoce, apagarDoce,
+  listarProdutos, produtoPorId, produtoPorSlug, salvarProduto, apagarProduto,
   listarClientes, clientePorId, clientePorEmail, salvarCliente,
   inserirPedido, listarPedidos, pedidoPorId, mudarStatusPedido, contarPedidosComStatus, apagarPedidosDemo,
 };

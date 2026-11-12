@@ -66,19 +66,19 @@ a.marca, a.marca:hover, div.marca { color: var(--tinta); }
 .secao { padding-block: 2.5rem; }
 .secao-titulo { font-size: 1.75rem; margin-bottom: 1.5rem; }
 
-/* Grade de doces */
-.grade-doces { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1.25rem; }
-@media (max-width: 520px) { .grade-doces { grid-template-columns: repeat(2, 1fr); gap: .75rem; } }
-.doce-card {
+/* Grade de produtos */
+.grade-produtos { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1.25rem; }
+@media (max-width: 520px) { .grade-produtos { grid-template-columns: repeat(2, 1fr); gap: .75rem; } }
+.produto-card {
   background: #fff; border: 1px solid var(--rosa); border-radius: 1rem; overflow: hidden;
   display: flex; flex-direction: column; text-decoration: none; color: inherit;
   transition: transform .15s ease, box-shadow .15s ease;
 }
-.doce-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(138, 47, 77, .12); color: inherit; }
-.doce-card .corpo { padding: .85rem 1rem 1rem; display: flex; flex-direction: column; gap: .2rem; flex: 1; }
-.doce-card h3 { font-size: 1.05rem; margin: 0; }
-.doce-card .preco { margin-top: auto; padding-top: .4rem; font-weight: 700; color: var(--rosa-forte); }
-.doce-card.indisponivel { opacity: .6; }
+.produto-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(138, 47, 77, .12); color: inherit; }
+.produto-card .corpo { padding: .85rem 1rem 1rem; display: flex; flex-direction: column; gap: .2rem; flex: 1; }
+.produto-card h3 { font-size: 1.05rem; margin: 0; }
+.produto-card .preco { margin-top: auto; padding-top: .4rem; font-weight: 700; color: var(--rosa-forte); }
+.produto-card.indisponivel { opacity: .6; }
 .foto {
   aspect-ratio: 4 / 3; width: 100%; background: var(--rosa); display: grid; place-items: center;
   font-size: 3.5rem; overflow: hidden;
@@ -104,7 +104,7 @@ a.marca, a.marca:hover, div.marca { color: var(--tinta); }
 .selo { display: inline-block; background: var(--rosa); color: var(--rosa-escuro); border-radius: 999px; padding: .15rem .7rem; font-size: .8rem; font-weight: 600; }
 .selo.cinza { background: #ece6e8; color: #5d4a50; }
 
-/* Página do doce */
+/* Página do produto */
 .preco-grande { font-size: 1.6rem; font-weight: 700; color: var(--rosa-forte); }
 .qtd { display: inline-flex; align-items: center; border: 1px solid var(--rosa-medio); border-radius: 999px; background: #fff; }
 .qtd button { width: 2.5rem; height: 2.5rem; border: 0; background: none; font-size: 1.25rem; color: var(--rosa-forte); cursor: pointer; border-radius: 999px; }
@@ -149,8 +149,8 @@ a.marca, a.marca:hover, div.marca { color: var(--tinta); }
 .tabela-simples { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .tabela-simples th, .tabela-simples td { padding: .35rem .5rem; border-bottom: 1px solid var(--rosa); text-align: left; }
 .tabela-simples td:last-child, .tabela-simples th:last-child { text-align: right; }
-.linha-doce { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .75rem 0; border-bottom: 1px solid var(--rosa); }
-.linha-doce .nome { flex: 1 1 12rem; font-weight: 600; }
+.linha-produto { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .75rem 0; border-bottom: 1px solid var(--rosa); }
+.linha-produto .nome { flex: 1 1 12rem; font-weight: 600; }
 
 /* Aviso flutuante */
 .aviso {

@@ -1,7 +1,7 @@
 'use strict';
 // Minha conta: dados do cliente e histórico de pedidos.
 
-App.pronto.then(async ({ loja, admin, cliente }) => {
+App.pronto.then(async ({ loja, admin, cliente, catalogo }) => {
   if (admin) return location.replace('/admin');
   if (!cliente) return location.replace('/login');
   const { esc, brl, dataBr, api, aviso, STATUS } = App;
@@ -47,7 +47,7 @@ App.pronto.then(async ({ loja, admin, cliente }) => {
             </div>
             <ul>${p.itens.map((i) => `<li>${i.quantidade}× ${esc(i.nome)}${i.observacoes ? ` <em>(${esc(i.observacoes)})</em>` : ''}</li>`).join('')}</ul>
           </article>`).join('')
-        : '<p class="suave">Você ainda não fez pedidos.</p><a class="btn btn-solid theme-primary" href="/">Escolher doces</a>'}
+        : `<p class="suave">Você ainda não fez pedidos.</p><a class="btn btn-solid theme-primary" href="/">Escolher ${esc(App.minusculas(catalogo.nomePlural))}</a>`}
       </div>
     </div>`;
 

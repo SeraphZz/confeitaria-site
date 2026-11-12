@@ -16,7 +16,7 @@ const IMAGENS = {
   webp: { ext: 'webp', ok: (b) => b.subarray(0, 4).toString() === 'RIFF' && b.subarray(8, 12).toString() === 'WEBP' },
 };
 
-// Serve para qualquer registro com o campo `imagem` (um doce ou a página Sobre); `nome` vira o início do arquivo.
+// Serve para qualquer registro com o campo `imagem` (um produto ou a página Sobre); `nome` vira o início do arquivo.
 // Só troca o arquivo e o campo: quem chama grava o registro no banco.
 function salvarImagem(registro, dataUrl, nome = registro.id) {
   const m = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(typeof dataUrl === 'string' ? dataUrl : '');

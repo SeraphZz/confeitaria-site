@@ -10,7 +10,7 @@ before(async () => { servidor = await subirServidor(); visitante = servidor.nave
 after(() => servidor.parar());
 
 test('páginas públicas respondem com HTML', async () => {
-  for (const caminho of ['/', '/sobre', '/carrinho', '/login', '/cadastro', '/conta', '/esqueci-senha', '/redefinir-senha', '/admin', '/doce/brigadeiro-gourmet']) {
+  for (const caminho of ['/', '/sobre', '/carrinho', '/login', '/cadastro', '/conta', '/esqueci-senha', '/redefinir-senha', '/admin', '/produto/brigadeiro-gourmet']) {
     const r = await visitante.get(caminho);
     assert.equal(r.status, 200, caminho);
     assert.match(r.cabecalhos.get('content-type'), /text\/html/, caminho);
@@ -79,12 +79,12 @@ test('métodos de gravação fora da API são recusados', async () => {
 });
 
 test('primeira execução cria o cardápio de exemplo', async () => {
-  const r = await visitante.get('/api/doces');
+  const r = await visitante.get('/api/produtos');
   assert.equal(r.status, 200);
   assert.equal(r.dados.length, 6);
-  const doce = r.dados[0];
-  assert.deepEqual(Object.keys(doce).sort(), ['descricao', 'disponivel', 'emoji', 'id', 'imagem', 'nome', 'preco', 'slug', 'unidade']);
-  const porSlug = await visitante.get(`/api/doces/${doce.slug}`);
-  assert.equal(porSlug.dados.id, doce.id);
-  assert.equal((await visitante.get('/api/doces/nao-existe')).status, 404);
+  const produto = r.dados[0];
+  assert.deepEqual(Object.keys(produto).sort(), ['descricao', 'disponivel', 'emoji', 'id', 'imagem', 'nome', 'preco', 'slug', 'unidade']);
+  const porSlug = await visitante.get(`/api/produtos/${produto.slug}`);
+  assert.equal(porSlug.dados.id, produto.id);
+  assert.equal((await visitante.get('/api/produtos/nao-existe')).status, 404);
 });

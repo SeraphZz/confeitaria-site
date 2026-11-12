@@ -9,7 +9,7 @@ const configuracoes = require('./configuracoes');
 
 function criarSlug(nome, existentes) {
   const base = nome.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'doce';
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'produto';
   let slug = base;
   for (let i = 2; existentes.includes(slug); i++) slug = `${base}-${i}`;
   return slug;
@@ -20,16 +20,17 @@ function criarDadosIniciais() {
   const senha = SENHA_INICIAL_ADMIN || sortearSenha();
   banco.transacao(() => {
     const slugs = [];
-    for (const d of seed.doces) {
+    for (const d of seed.produtos) {
       const slug = criarSlug(d.nome, slugs);
       slugs.push(slug);
-      banco.salvarDoce({
+      banco.salvarProduto({
         id: crypto.randomUUID(), slug, nome: d.nome, descricao: d.descricao, preco: d.preco,
         unidade: d.unidade, emoji: d.emoji, imagem: '', disponivel: true,
       });
     }
     configuracoes.substituir('loja', seed.loja);
     configuracoes.substituir('sobre', seed.sobre);
+    configuracoes.substituir('catalogo', seed.catalogo);
     configuracoes.substituir('admin', { usuario: 'confeiteira', ...gerarHash(senha), senhaInicial: true });
   });
   if (!SENHA_INICIAL_ADMIN) {

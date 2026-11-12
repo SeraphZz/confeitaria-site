@@ -54,18 +54,20 @@ const App = (() => {
     itens() {
       try {
         const itens = JSON.parse(localStorage.getItem('carrinho') || '[]');
-        return Array.isArray(itens) ? itens : [];
+        if (!Array.isArray(itens)) return [];
+        // Carrinhos guardados antes de "doce" virar "produto" usam o campo antigo `doceId`.
+        return itens.map(({ doceId, ...item }) => (item.produtoId ? item : { ...item, produtoId: doceId }));
       } catch { return []; }
     },
     salvar(itens) {
       localStorage.setItem('carrinho', JSON.stringify(itens));
       atualizarContador();
     },
-    adicionar(doceId, quantidade, observacoes) {
+    adicionar(produtoId, quantidade, observacoes) {
       const itens = this.itens();
-      const igual = itens.find((i) => i.doceId === doceId && i.observacoes === observacoes);
+      const igual = itens.find((i) => i.produtoId === produtoId && i.observacoes === observacoes);
       if (igual) igual.quantidade = Math.min(999, igual.quantidade + quantidade);
-      else itens.push({ doceId, quantidade, observacoes });
+      else itens.push({ produtoId, quantidade, observacoes });
       this.salvar(itens);
     },
     quantidadeTotal() { return this.itens().reduce((s, i) => s + i.quantidade, 0); },
@@ -80,10 +82,10 @@ const App = (() => {
   }
 
   // `ampliar: true` transforma a foto em um botão que abre a imagem inteira (ver visor, abaixo).
-  function fotoHtml(doce, classe = '', { ampliar = false } = {}) {
-    const img = `<img src="${esc(doce.imagem)}" alt="${esc(doce.nome)}" loading="lazy">`;
-    const dentro = !doce.imagem ? `<span aria-hidden="true">${esc(doce.emoji)}</span>`
-      : ampliar ? `<button type="button" class="ampliar" data-ampliar aria-label="Ver a foto inteira de ${esc(doce.nome)}">${img}</button>` : img;
+  function fotoHtml(produto, classe = '', { ampliar = false } = {}) {
+    const img = `<img src="${esc(produto.imagem)}" alt="${esc(produto.nome)}" loading="lazy">`;
+    const dentro = !produto.imagem ? `<span aria-hidden="true">${esc(produto.emoji)}</span>`
+      : ampliar ? `<button type="button" class="ampliar" data-ampliar aria-label="Ver a foto inteira de ${esc(produto.nome)}">${img}</button>` : img;
     return `<div class="foto ${classe}">${dentro}</div>`;
   }
 
@@ -116,7 +118,7 @@ const App = (() => {
     return canvas.toDataURL('image/jpeg', 0.85);
   }
 
-  function montarCabecalho({ loja, admin, cliente }) {
+  function montarCabecalho({ loja, admin, cliente, catalogo }) {
     const aqui = location.pathname;
     const elo = (href, rotulo, extra = '') =>
       `<a class="elo${aqui === href ? ' ativo' : ''}" href="${href}">${rotulo}${extra}</a>`;
@@ -129,7 +131,7 @@ const App = (() => {
       <header class="topo"><div class="container topo-linha">
         <a class="marca" href="/"><span class="marca-icone" aria-hidden="true">🧁 </span>${esc(loja.nome)}</a>
         <nav class="d-flex align-items-center" aria-label="Principal">
-          ${elo('/', 'Doces')}${elo('/sobre', 'Sobre')}
+          ${elo('/', esc(catalogo.nomePlural))}${elo('/sobre', 'Sobre')}
           ${elo('/carrinho', 'Carrinho', '<span class="contador" id="contador-carrinho" hidden>0</span>')}
           ${admin ? '' : cliente
             ? elo('/conta', `Olá, ${esc(cliente.nome.split(' ')[0])}`)
@@ -259,13 +261,16 @@ const App = (() => {
     });
   }
 
+  // "Doces" -> "doces", para usar o nome que a loja escolheu no meio de uma frase ("Ver doces").
+  const minusculas = (textoQualquer) => String(textoQualquer ?? '').toLocaleLowerCase('pt-BR');
+
   const STATUS = {
     novo: 'Novo', confirmado: 'Confirmado', producao: 'Em produção',
     pronto: 'Pronto', entregue: 'Entregue', cancelado: 'Cancelado',
   };
 
   return {
-    esc, brl, lerPreco, dataBr, api, aviso, carrinho, fotoHtml, reduzirImagem, sair, STATUS, pronto,
+    esc, brl, lerPreco, dataBr, api, aviso, carrinho, fotoHtml, reduzirImagem, sair, STATUS, pronto, minusculas,
     formatarTelefone, linkWhats, enderecoHtml, lerEndereco, ligarMascaras,
   };
 })();

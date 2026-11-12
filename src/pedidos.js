@@ -29,10 +29,12 @@ function criarPedido(corpo, conta) {
   }
   // Preço e nome vêm sempre do banco — nunca do que o navegador enviou.
   const itens = corpo.itens.map((item) => {
-    const doce = item && typeof item.doceId === 'string' ? banco.docePorId(item.doceId) : null;
-    if (!doce || !doce.disponivel) throw new ErroHttp(409, 'Um dos doces do carrinho não está mais disponível. Atualize a página.');
+    // `doceId` é o nome antigo do campo: ainda pode chegar de um carrinho guardado no navegador antes da atualização.
+    const id = item && (item.produtoId ?? item.doceId);
+    const produto = typeof id === 'string' ? banco.produtoPorId(id) : null;
+    if (!produto || !produto.disponivel) throw new ErroHttp(409, 'Um dos itens do carrinho não está mais disponível. Atualize a página.');
     return {
-      doceId: doce.id, nome: doce.nome, precoUnit: doce.preco,
+      produtoId: produto.id, nome: produto.nome, precoUnit: produto.preco,
       quantidade: inteiro(item.quantidade, { min: 1, max: 999, campo: 'quantidade' }),
       observacoes: texto(item.observacoes, { max: 300, campo: 'alterações' }),
     };
@@ -88,7 +90,7 @@ function montarDashboard(dias) {
   const serie = new Map();
   for (let d = inicio; d <= hoje; d = somarDias(d, 1)) serie.set(d, { data: d, receita: 0, pedidos: 0 });
 
-  const porDoce = new Map();
+  const porProduto = new Map();
   const status = Object.fromEntries(STATUS.map((s) => [s, 0]));
   let receita = 0, pedidos = 0, receitaAnterior = 0;
   const emAberto = banco.contarPedidosComStatus(STATUS_ABERTOS); // de qualquer data
@@ -106,10 +108,10 @@ function montarDashboard(dias) {
       receita += p.total;
       pedidos++;
       for (const item of p.itens) {
-        const reg = porDoce.get(item.nome) || { nome: item.nome, quantidade: 0, receita: 0 };
+        const reg = porProduto.get(item.nome) || { nome: item.nome, quantidade: 0, receita: 0 };
         reg.quantidade += item.quantidade;
         reg.receita += item.precoUnit * item.quantidade;
-        porDoce.set(item.nome, reg);
+        porProduto.set(item.nome, reg);
       }
     } else if (criado >= inicioAnterior) {
       receitaAnterior += p.total;
@@ -120,7 +122,7 @@ function montarDashboard(dias) {
     dias,
     kpis: { receita, pedidos, ticketMedio: pedidos ? Math.round(receita / pedidos) : 0, receitaAnterior, emAberto },
     serie: [...serie.values()],
-    topDoces: [...porDoce.values()].sort((a, b) => b.receita - a.receita).slice(0, 6),
+    topProdutos: [...porProduto.values()].sort((a, b) => b.receita - a.receita).slice(0, 6),
     status,
   };
 }

@@ -100,6 +100,39 @@ test('banco mais novo que o programa: recusa subir em vez de arriscar os dados',
   assert.equal(versaoDe(db), 999);
 });
 
+test('migração 002: "doces" vira "produtos" sem perder nada, e a loja antiga mantém o vocabulário', () => {
+  // Loja em funcionamento na estrutura antiga: um doce, um cliente e um pedido com dois itens (um de doce já apagado).
+  carregarMigracoes()[0].subir(db);
+  db.exec(`
+    INSERT INTO config (chave, valor) VALUES ('admin', '{"usuario":"confeiteira"}');
+    INSERT INTO doces (id, slug, nome, descricao, preco, unidade, emoji, imagem, disponivel)
+      VALUES ('d1', 'bolo-de-fuba', 'Bolo de fubá', 'Fofinho', 4500, 'unidade', '🌽', '/uploads/d1-1.jpg', 0);
+    INSERT INTO clientes (id, email, nome, telefone, salt, hash, criado_em) VALUES ('c1', 'a@b.com', 'Ana', '11999999999', 's', 'h', '2026-01-01T00:00:00.000Z');
+    INSERT INTO pedidos (id, criado_em, cliente_id, cliente_nome, cliente_telefone, entrega_tipo, entrega_data, total, status)
+      VALUES ('p1', '2026-01-02T10:00:00.000Z', 'c1', 'Ana', '11999999999', 'retirada', '2026-01-05', 9500, 'entregue');
+    INSERT INTO pedido_itens (pedido_numero, doce_id, nome, preco_unit, quantidade) VALUES (1, 'd1', 'Bolo de fubá', 4500, 2), (1, 'apagado', 'Torta antiga', 500, 1);
+  `);
+
+  aplicar(db, { pastaBackups: backups(), log: silencio });
+
+  assert.ok(!tabelas().includes('doces'));
+  assert.deepEqual({ ...db.prepare('SELECT * FROM produtos').get() }, {
+    id: 'd1', slug: 'bolo-de-fuba', nome: 'Bolo de fubá', descricao: 'Fofinho', preco: 4500, unidade: 'unidade', emoji: '🌽', imagem: '/uploads/d1-1.jpg', disponivel: 0,
+  });
+  assert.deepEqual(db.prepare('SELECT produto_id, nome, quantidade FROM pedido_itens ORDER BY rowid').all().map((l) => ({ ...l })), [
+    { produto_id: 'd1', nome: 'Bolo de fubá', quantidade: 2 }, { produto_id: 'apagado', nome: 'Torta antiga', quantidade: 1 },
+  ]);
+  assert.equal(db.prepare('SELECT total FROM pedidos WHERE numero = 1').get().total, 9500);
+  assert.throws(() => db.prepare("INSERT INTO produtos (id, slug, nome, preco, unidade, emoji) VALUES ('d2', 'bolo-de-fuba', 'X', 1, 'u', 'x')").run(), /UNIQUE/, 'o slug continua único');
+  assert.deepEqual(JSON.parse(db.prepare("SELECT valor FROM config WHERE chave = 'catalogo'").get().valor), { nomeSingular: 'Doce', nomePlural: 'Doces', emojiPadrao: '🧁' });
+});
+
+test('migração 002: banco novo não recebe vocabulário de confeitaria', () => {
+  aplicar(db, { log: silencio });
+  assert.ok(tabelas().includes('produtos'));
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM config WHERE chave = 'catalogo'").get().n, 0);
+});
+
 test('arquivos de migração fora de sequência são recusados', () => {
   const dir = path.join(pasta, 'm');
   fs.mkdirSync(dir);

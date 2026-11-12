@@ -60,7 +60,7 @@ test('conta: login, edição de dados, troca de senha e sair', async (t) => {
     assert.equal((await nav.get('/api/clientes')).status, 401);
     assert.equal((await nav.get('/api/dashboard')).status, 401);
     assert.equal((await nav.put('/api/loja', { nome: 'Invadida' })).status, 401);
-    assert.equal((await nav.post('/api/doces', { nome: 'X', preco: 1 })).status, 401);
+    assert.equal((await nav.post('/api/produtos', { nome: 'X', preco: 1 })).status, 401);
   });
 
   await t.test('edita os próprios dados', async () => {

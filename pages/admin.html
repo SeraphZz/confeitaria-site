@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Painel da confeiteira</title>
+  <title>Painel</title>
   <link rel="stylesheet" href="/css/bootstrap.min.css">
   <link rel="stylesheet" href="/css/site.css">
 </head>
@@ -19,7 +19,7 @@
         <button type="button" role="tab" data-aba="resumo">Resumo</button>
         <button type="button" role="tab" data-aba="pedidos">Pedidos</button>
         <button type="button" role="tab" data-aba="clientes">Clientes</button>
-        <button type="button" role="tab" data-aba="doces">Doces</button>
+        <button type="button" role="tab" data-aba="produtos">Produtos</button>
         <button type="button" role="tab" data-aba="config">Configurações</button>
       </div>
 
@@ -43,9 +43,9 @@
           </div>
           <div class="col-12 lg:col-5">
             <div class="painel">
-              <h2 class="fs-lg mb-4">Doces que mais renderam</h2>
-              <div class="grafico"><canvas id="grafico-doces" role="img" aria-label="Gráfico de barras da receita por doce"></canvas></div>
-              <details class="mt-4"><summary class="suave fs-sm">Ver em tabela</summary><div id="tabela-doces" class="mt-3"></div></details>
+              <h2 class="fs-lg mb-4" id="titulo-grafico-produtos">Produtos que mais renderam</h2>
+              <div class="grafico"><canvas id="grafico-produtos" role="img" aria-label="Gráfico de barras da receita por produto"></canvas></div>
+              <details class="mt-4"><summary class="suave fs-sm">Ver em tabela</summary><div id="tabela-produtos" class="mt-3"></div></details>
             </div>
           </div>
         </div>
@@ -65,16 +65,16 @@
         <div id="lista-clientes"></div>
       </section>
 
-      <section id="aba-doces" hidden>
-        <form class="painel mb-5" id="form-novo-doce">
-          <h2 class="fs-lg mb-4">Novo doce</h2>
+      <section id="aba-produtos" hidden>
+        <form class="painel mb-5" id="form-novo-produto">
+          <h2 class="fs-lg mb-4" id="titulo-novo-produto">Adicionar produto</h2>
           <div class="row g-4 align-items-end">
             <div class="col-12 md:col-6"><label class="form-label" for="novo-nome">Nome</label><input class="form-control" id="novo-nome" maxlength="80" required></div>
             <div class="col-6 md:col-3"><label class="form-label" for="novo-preco">Preço (R$)</label><input class="form-control" id="novo-preco" inputmode="decimal" placeholder="0,00" required></div>
             <div class="col-6 md:col-3"><button class="btn btn-solid theme-primary w-100">Criar e editar</button></div>
           </div>
         </form>
-        <div class="painel" id="lista-doces"></div>
+        <div class="painel" id="lista-produtos"></div>
       </section>
 
       <section id="aba-config" hidden>
@@ -88,6 +88,16 @@
               <div class="mb-4"><label class="form-label" for="loja-instagram">Instagram</label><input class="form-control" id="loja-instagram" maxlength="40"></div>
               <div class="mb-4"><label class="form-label" for="loja-email">E-mail</label><input class="form-control" id="loja-email" type="email" maxlength="120"></div>
               <div class="mb-5"><label class="form-label" for="loja-cidade">Cidade</label><input class="form-control" id="loja-cidade" maxlength="80"></div>
+              <button class="btn btn-solid theme-primary">Salvar</button>
+            </form>
+            <form class="painel mt-5" id="form-catalogo">
+              <h2 class="fs-lg mb-2">Como você chama o que vende?</h2>
+              <p class="suave fs-sm mb-4">Esses nomes aparecem no menu, nos botões e nos títulos do site. Exemplos: Doce / Doces, Prato / Pratos, Peça / Peças.</p>
+              <div class="row g-4 mb-4">
+                <div class="col-6"><label class="form-label" for="catalogo-nomeSingular">Um item</label><input class="form-control" id="catalogo-nomeSingular" maxlength="30" required placeholder="Produto"></div>
+                <div class="col-6"><label class="form-label" for="catalogo-nomePlural">Vários itens</label><input class="form-control" id="catalogo-nomePlural" maxlength="30" required placeholder="Produtos"></div>
+              </div>
+              <div class="mb-5"><label class="form-label" for="catalogo-emojiPadrao">Ícone para itens sem foto</label><input class="form-control" id="catalogo-emojiPadrao" maxlength="8" style="max-width: 6rem"></div>
               <button class="btn btn-solid theme-primary">Salvar</button>
             </form>
           </div>

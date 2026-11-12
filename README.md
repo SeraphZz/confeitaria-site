@@ -99,6 +99,7 @@ Tudo o que é próprio de um estabelecimento fica no banco (tabela `config`) e p
 |---|---|---|
 | `loja` | nome, slogan, WhatsApp, Instagram, e-mail, cidade | qualquer visitante |
 | `sobre` | texto, trajetória e foto da página Sobre | qualquer visitante |
+| `catalogo` | como a loja chama o que vende (ex.: Doce / Doces, Prato / Pratos) e o ícone de itens sem foto | qualquer visitante |
 | `operacao` | fuso horário da loja | só o painel |
 | `admin` | conta de acesso ao painel | ninguém (nunca sai do servidor) |
 

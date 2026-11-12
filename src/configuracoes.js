@@ -50,6 +50,21 @@ const SECOES = {
     },
   },
 
+  // Vocabulário do catálogo: cada negócio chama o que vende de um jeito (doces, pratos, peças, produtos...).
+  // As telas montam os textos com estes nomes, sempre em frases que servem para qualquer palavra ("Ver doces",
+  // "Adicionar prato"), sem artigo nem adjetivo que dependa de masculino/feminino.
+  catalogo: {
+    publica: true,
+    editavel: true,
+    padrao: { nomeSingular: 'Produto', nomePlural: 'Produtos', emojiPadrao: '🛍️' },
+    validar: (corpo) => ({
+      nomeSingular: texto(corpo.nomeSingular, { max: 30, obrigatorio: true, campo: 'nome no singular' }),
+      nomePlural: texto(corpo.nomePlural, { max: 30, obrigatorio: true, campo: 'nome no plural' }),
+      // Ícone mostrado no lugar da foto em produtos que ainda não têm uma.
+      emojiPadrao: texto(corpo.emojiPadrao, { max: 8, campo: 'ícone padrão' }) || '🛍️',
+    }),
+  },
+
   operacao: {
     publica: false,
     editavel: true,
