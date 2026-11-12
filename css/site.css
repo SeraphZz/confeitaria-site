@@ -191,3 +191,7 @@ details.pedido[open] > summary { padding-bottom: .5rem; border-bottom: 1px solid
 .amostra-cor input[type='color'] { width: 3.5rem; height: 2.5rem; padding: .15rem; border: 1px solid var(--marca-media); border-radius: .5rem; background: #fff; cursor: pointer; }
 .previa-imagem { display: grid; place-items: center; min-height: 5rem; padding: .75rem; border: 1px dashed var(--marca-media); border-radius: .75rem; background: var(--marca-clara); }
 .previa-imagem img { max-width: 100%; max-height: 8rem; object-fit: contain; }
+
+/* Painel > Configurações: tabela de horários */
+.tabela-horarios td, .tabela-horarios th { text-align: left !important; white-space: nowrap; }
+.tabela-horarios input[type='time'] { min-width: 6.5rem; }

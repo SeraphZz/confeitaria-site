@@ -123,10 +123,10 @@ test('página Sobre: texto, trajetória e foto', async () => {
 
 test('dados da loja: grava, limpa e aparece no site', async () => {
   const r = await loja.put('/api/loja', {
-    nome: 'Loja de Teste', slogan: 'Um slogan', whatsapp: '(11) 91234-5678', instagram: '@loja.teste!', email: 'oi@loja.com', cidade: 'Recife, PE',
+    nome: 'Loja de Teste', slogan: 'Um slogan', whatsapp: '(11) 91234-5678', instagram: '@loja.teste!', email: 'oi@loja.com', endereco: ' Rua do Sol, 10 - Centro ', cidade: 'Recife, PE',
   });
   assert.equal(r.status, 200);
-  assert.deepEqual(r.dados, { nome: 'Loja de Teste', slogan: 'Um slogan', whatsapp: '11912345678', instagram: 'loja.teste', email: 'oi@loja.com', cidade: 'Recife, PE' });
+  assert.deepEqual(r.dados, { nome: 'Loja de Teste', slogan: 'Um slogan', whatsapp: '11912345678', instagram: 'loja.teste', email: 'oi@loja.com', endereco: 'Rua do Sol, 10 - Centro', cidade: 'Recife, PE' });
   assert.deepEqual((await visitante.get('/api/site')).dados.loja, r.dados);
   assert.equal((await loja.put('/api/loja', { nome: '' })).status, 400);
   assert.equal((await loja.put('/api/loja', { nome: 'x'.repeat(61) })).status, 400);

@@ -18,6 +18,10 @@ function criarPedido(corpo, conta) {
   const telefone = lerTelefone(cliente.telefone);
 
   const tipo = entrega.tipo === 'entrega' ? 'entrega' : 'retirada';
+  // A loja pode desligar uma das formas de receber (Painel > Configurações); a tela já esconde, o servidor confere.
+  if (!configuracoes.ler('atendimento')[tipo].ativa) {
+    throw new ErroHttp(400, tipo === 'entrega' ? 'No momento a loja não está fazendo entregas. Escolha retirada.' : 'No momento a loja não tem retirada. Escolha entrega.');
+  }
   const endereco = tipo === 'entrega' ? lerEndereco(entrega.endereco, true) : null;
   const data = String(entrega.data || '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || Number.isNaN(Date.parse(data)) || data < diaNoFuso(new Date(), configuracoes.fusoHorario())) {

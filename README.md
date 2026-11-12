@@ -34,7 +34,8 @@ Os dados ficam em um banco SQLite, o arquivo `data/loja.db`. As fotos ficam em `
 - Ver os pedidos por pessoa em Painel > Clientes (total gasto, quantidade e histórico de cada cliente).
 - Acompanhar pedidos e mudar o status (Novo → Confirmado → Em produção → Pronto → Entregue / Cancelado).
 - Ver receita por dia, ticket médio e produtos que mais renderam (7, 30 ou 90 dias).
-- Trocar nome da loja, WhatsApp, Instagram, e-mail, senha e o nome dado aos produtos em Configurações.
+- Trocar nome da loja, contatos, endereço, horários, formas de entrega, senha e o nome dado aos produtos em Configurações.
+- Mudar cores, letra dos títulos, logotipo e banner em Aparência, vendo como fica antes de publicar.
 
 ## Contas de clientes
 
@@ -79,6 +80,7 @@ src/rotas/       rotas da API por assunto: contas.js, catalogo.js, pedidos.js, l
 src/configuracoes.js  configurações da loja: padrões, validação e o que é público (ver abaixo)
 src/tema.js      transforma as escolhas de aparência no CSS servido em /tema.css
 src/aparencia.js rascunho, publicação e descarte do tema
+src/atendimento.js  horários de funcionamento e formas de receber o pedido
 src/*.js         sessão, senhas, validação, datas, regras de pedidos, imagens e arquivos estáticos
 banco.js         camada de dados (SQLite): todas as consultas
 migracoes/       estrutura das tabelas, em arquivos numerados (ver abaixo)
@@ -99,11 +101,12 @@ Tudo o que é próprio de um estabelecimento fica no banco (tabela `config`) e p
 
 | Seção | Conteúdo | Quem recebe |
 |---|---|---|
-| `loja` | nome, slogan, WhatsApp, Instagram, e-mail, cidade | qualquer visitante |
+| `loja` | nome, slogan, WhatsApp, Instagram, e-mail, endereço, cidade | qualquer visitante |
 | `sobre` | texto, trajetória e foto da página Sobre | qualquer visitante |
 | `catalogo` | como a loja chama o que vende (ex.: Doce / Doces, Prato / Pratos) e o ícone de itens sem foto | qualquer visitante |
 | `tema` | cores, letra dos títulos, logotipo, ícone da aba e banner (versão publicada) | qualquer visitante |
 | `temaRascunho` | alterações de aparência ainda não publicadas | só o painel |
+| `atendimento` | horários de funcionamento e formas de receber o pedido (retirada, entrega) | qualquer visitante |
 | `operacao` | fuso horário da loja | só o painel |
 | `admin` | conta de acesso ao painel | ninguém (nunca sai do servidor) |
 
@@ -119,7 +122,14 @@ O painel lê as seções editáveis em `GET /api/configuracoes` e grava uma seç
 - Imagens: JPG, PNG ou WebP, até 2 MB (o navegador reduz antes de enviar). Ficam em `data/uploads/`, junto com as fotos dos produtos.
 - Nenhum texto digitado vai direto para o CSS: cores só no formato `#rrggbb`, fonte só da lista, endereços de imagem só os gerados pelo servidor.
 
-**Fuso horário.** A data mínima dos pedidos ("de hoje em diante") e os dias do resumo seguem o fuso da loja, não o do servidor. O padrão é `America/Sao_Paulo`. Para uma loja em outro fuso (ex.: `America/Manaus`), grave `{"fusoHorario": "America/Manaus"}` em `/api/configuracoes/operacao`; o campo entra na tela de Configurações em uma etapa futura.
+**Horários, entrega e retirada (Painel > Configurações).**
+
+- **Horários de funcionamento:** um período por dia e, para quem fecha no meio do dia, um segundo (ex.: almoço e jantar). Aparecem no rodapé do site só depois que a loja marca "Mostrar os horários"; dias seguidos com o mesmo horário são agrupados ("Seg a Sex: 9h às 18h"). São informativos: não bloqueiam pedidos fora do horário.
+- **Como o cliente recebe o pedido:** a loja liga ou desliga retirada e entrega (ao menos uma fica ligada) e escreve as informações de cada uma, além do texto da taxa de entrega. O carrinho só oferece o que está ligado, e o servidor recusa pedido em uma forma desligada.
+- **Endereço da loja:** opcional; quando preenchido, aparece no rodapé.
+- As regras ficam em `src/atendimento.js`.
+
+**Fuso horário.** A data mínima dos pedidos ("de hoje em diante") e os dias do resumo seguem o fuso da loja, não o do servidor. O padrão é `America/Sao_Paulo`. Para uma loja em outro fuso, escolha em Painel > Configurações > Horários de funcionamento (a lista traz os quatro fusos do Brasil).
 
 O que muda de um **servidor** para outro (porta, endereço público, proxy, SMTP) continua em variáveis de ambiente, lidas em `src/ambiente.js` e `email.js`.
 

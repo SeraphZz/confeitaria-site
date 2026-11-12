@@ -16,18 +16,21 @@ const { ErroHttp } = require('./http');
 const { texto } = require('./validacao');
 const { fusoValido } = require('./datas');
 const { FONTES, FONTE_PADRAO, normalizarCor } = require('./tema');
+const atendimento = require('./atendimento');
 
 const SECOES = {
   loja: {
     publica: true,
     editavel: true,
-    padrao: { nome: 'Minha loja', slogan: '', whatsapp: '', instagram: '', email: '', cidade: '' },
+    padrao: { nome: 'Minha loja', slogan: '', whatsapp: '', instagram: '', email: '', endereco: '', cidade: '' },
     validar: (corpo) => ({
       nome: texto(corpo.nome, { max: 60, obrigatorio: true, campo: 'nome da loja' }),
       slogan: texto(corpo.slogan, { max: 160, campo: 'slogan' }),
       whatsapp: String(corpo.whatsapp || '').replace(/\D/g, '').slice(0, 15),
       instagram: texto(corpo.instagram, { max: 40, campo: 'Instagram' }).replace(/^@/, '').replace(/[^\w.]/g, ''),
       email: texto(corpo.email, { max: 120, campo: 'e-mail' }),
+      // Rua, número e bairro, em uma linha só. Vazio = a loja não divulga o endereço.
+      endereco: texto(corpo.endereco, { max: 160, campo: 'endereço' }),
       cidade: texto(corpo.cidade, { max: 80, campo: 'cidade' }),
     }),
   },
@@ -91,6 +94,9 @@ const SECOES = {
       };
     },
   },
+
+  // Horários de funcionamento e formas de receber o pedido (ver src/atendimento.js).
+  atendimento: { publica: true, editavel: true, padrao: atendimento.PADRAO, validar: (corpo) => atendimento.validar(corpo) },
 
   operacao: {
     publica: false,

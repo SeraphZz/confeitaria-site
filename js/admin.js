@@ -1,7 +1,7 @@
 'use strict';
 // Painel da loja: resumo com gráficos, pedidos, clientes, produtos e configurações.
 
-App.pronto.then(async ({ loja, admin, catalogo }) => {
+App.pronto.then(async ({ loja, admin, catalogo, atendimento }) => {
   if (!admin) return location.replace('/login');
   const { esc, brl, dataBr, api, aviso, minusculas } = App;
   const el = (id) => document.getElementById(id);
@@ -247,7 +247,7 @@ App.pronto.then(async ({ loja, admin, catalogo }) => {
   });
 
   // ------------------------------------------------------------ configurações
-  const CAMPOS_LOJA = ['nome', 'slogan', 'whatsapp', 'instagram', 'email', 'cidade'];
+  const CAMPOS_LOJA = ['nome', 'slogan', 'whatsapp', 'instagram', 'email', 'endereco', 'cidade'];
   let dadosLoja = loja;
 
   const CAMPOS_CATALOGO = ['nomeSingular', 'nomePlural', 'emojiPadrao'];
@@ -256,7 +256,64 @@ App.pronto.then(async ({ loja, admin, catalogo }) => {
     for (const campo of CAMPOS_LOJA) el(`loja-${campo}`).value = dadosLoja[campo] || '';
     el('loja-whatsapp').value = App.formatarTelefone(dadosLoja.whatsapp);
     for (const campo of CAMPOS_CATALOGO) el(`catalogo-${campo}`).value = catalogo[campo] || '';
+    await carregarAtendimento();
   }
+
+  // ---- horários, fuso e formas de receber o pedido
+  const CAMPOS_DIA = ['abre', 'fecha', 'abre2', 'fecha2'];
+  // Os quatro fusos do Brasil; um valor diferente já gravado (loja fora do país) entra na lista como está.
+  const FUSOS = [
+    ['America/Noronha', 'Fernando de Noronha (1 hora à frente de Brasília)'],
+    ['America/Sao_Paulo', 'Horário de Brasília'],
+    ['America/Manaus', 'Amazonas, Mato Grosso, Mato Grosso do Sul, Rondônia e Roraima (1 hora atrás)'],
+    ['America/Rio_Branco', 'Acre (2 horas atrás de Brasília)'],
+  ];
+  let dadosAtendimento = atendimento;
+
+  function ajustarDia(i) {
+    for (const campo of CAMPOS_DIA) el(`dia-${i}-${campo}`).disabled = !el(`dia-${i}-aberto`).checked;
+  }
+
+  async function carregarAtendimento() {
+    const { operacao } = await api('/api/configuracoes');
+    const fusos = FUSOS.some(([id]) => id === operacao.fusoHorario) ? FUSOS : [...FUSOS, [operacao.fusoHorario, operacao.fusoHorario]];
+    el('operacao-fusoHorario').innerHTML = fusos.map(([id, nome]) => `<option value="${esc(id)}">${esc(nome)}</option>`).join('');
+    el('operacao-fusoHorario').value = operacao.fusoHorario;
+
+    dadosAtendimento.horarios.forEach((dia, i) => {
+      el(`dia-${i}-aberto`).checked = dia.aberto;
+      for (const campo of CAMPOS_DIA) el(`dia-${i}-${campo}`).value = dia[campo];
+      ajustarDia(i);
+    });
+    el('atendimento-exibirHorarios').checked = dadosAtendimento.exibirHorarios;
+    el('atendimento-observacaoHorarios').value = dadosAtendimento.observacaoHorarios;
+    el('retirada-ativa').checked = dadosAtendimento.retirada.ativa;
+    el('retirada-instrucoes').value = dadosAtendimento.retirada.instrucoes;
+    el('entrega-ativa').checked = dadosAtendimento.entrega.ativa;
+    el('entrega-taxa').value = dadosAtendimento.entrega.taxa;
+    el('entrega-instrucoes').value = dadosAtendimento.entrega.instrucoes;
+  }
+
+  for (let i = 0; i < 7; i++) el(`dia-${i}-aberto`).addEventListener('change', () => ajustarDia(i));
+
+  el('form-atendimento').addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    try {
+      dadosAtendimento = await api('/api/configuracoes/atendimento', { metodo: 'PUT', corpo: {
+        horarios: Array.from({ length: 7 }, (_, i) => ({
+          aberto: el(`dia-${i}-aberto`).checked,
+          ...Object.fromEntries(CAMPOS_DIA.map((campo) => [campo, el(`dia-${i}-${campo}`).value])),
+        })),
+        exibirHorarios: el('atendimento-exibirHorarios').checked,
+        observacaoHorarios: el('atendimento-observacaoHorarios').value,
+        retirada: { ativa: el('retirada-ativa').checked, instrucoes: el('retirada-instrucoes').value },
+        entrega: { ativa: el('entrega-ativa').checked, taxa: el('entrega-taxa').value, instrucoes: el('entrega-instrucoes').value },
+      } });
+      await api('/api/configuracoes/operacao', { metodo: 'PUT', corpo: { fusoHorario: el('operacao-fusoHorario').value } });
+      await carregarAtendimento();
+      aviso('Horários e formas de receber salvos.');
+    } catch (erro) { tratarErro(erro); }
+  });
 
   el('form-catalogo').addEventListener('submit', async (evento) => {
     evento.preventDefault();

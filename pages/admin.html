@@ -165,7 +165,82 @@
               <div class="mb-4"><label class="form-label" for="loja-whatsapp">WhatsApp com DDD</label><input class="form-control" id="loja-whatsapp" type="tel" data-mascara="telefone" inputmode="numeric" placeholder="(11) 99999-9999"></div>
               <div class="mb-4"><label class="form-label" for="loja-instagram">Instagram</label><input class="form-control" id="loja-instagram" maxlength="40"></div>
               <div class="mb-4"><label class="form-label" for="loja-email">E-mail</label><input class="form-control" id="loja-email" type="email" maxlength="120"></div>
+              <div class="mb-4"><label class="form-label" for="loja-endereco">Endereço (rua, número e bairro)</label><input class="form-control" id="loja-endereco" maxlength="160" placeholder="Deixe vazio se não quiser divulgar"></div>
               <div class="mb-5"><label class="form-label" for="loja-cidade">Cidade</label><input class="form-control" id="loja-cidade" maxlength="80"></div>
+              <button class="btn btn-solid theme-primary">Salvar</button>
+            </form>
+            <form class="painel mt-5" id="form-atendimento">
+              <h2 class="fs-lg mb-2">Horários de funcionamento</h2>
+              <p class="suave fs-sm mb-4">Marque os dias em que a loja abre. Os dois últimos campos são para quem fecha no meio do dia e reabre depois (ex.: almoço e jantar); se não for o seu caso, deixe vazios.</p>
+              <div style="overflow-x: auto">
+              <table class="tabela-simples tabela-horarios mb-4">
+                <thead><tr><th>Dia</th><th>Abre</th><th>Fecha</th><th>Reabre</th><th>Fecha</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><label class="d-flex gap-2 align-items-center"><input type="checkbox" id="dia-1-aberto"> Segunda</label></td>
+                    <td><input class="form-control" type="time" id="dia-1-abre" aria-label="Segunda: abre às"></td>
+                    <td><input class="form-control" type="time" id="dia-1-fecha" aria-label="Segunda: fecha às"></td>
+                    <td><input class="form-control" type="time" id="dia-1-abre2" aria-label="Segunda: reabre às (opcional)"></td>
+                    <td><input class="form-control" type="time" id="dia-1-fecha2" aria-label="Segunda: fecha de novo às (opcional)"></td>
+                  </tr>
+                  <tr>
+                    <td><label class="d-flex gap-2 align-items-center"><input type="checkbox" id="dia-2-aberto"> Terça</label></td>
+                    <td><input class="form-control" type="time" id="dia-2-abre" aria-label="Terça: abre às"></td>
+                    <td><input class="form-control" type="time" id="dia-2-fecha" aria-label="Terça: fecha às"></td>
+                    <td><input class="form-control" type="time" id="dia-2-abre2" aria-label="Terça: reabre às (opcional)"></td>
+                    <td><input class="form-control" type="time" id="dia-2-fecha2" aria-label="Terça: fecha de novo às (opcional)"></td>
+                  </tr>
+                  <tr>
+                    <td><label class="d-flex gap-2 align-items-center"><input type="checkbox" id="dia-3-aberto"> Quarta</label></td>
+                    <td><input class="form-control" type="time" id="dia-3-abre" aria-label="Quarta: abre às"></td>
+                    <td><input class="form-control" type="time" id="dia-3-fecha" aria-label="Quarta: fecha às"></td>
+                    <td><input class="form-control" type="time" id="dia-3-abre2" aria-label="Quarta: reabre às (opcional)"></td>
+                    <td><input class="form-control" type="time" id="dia-3-fecha2" aria-label="Quarta: fecha de novo às (opcional)"></td>
+                  </tr>
+                  <tr>
+                    <td><label class="d-flex gap-2 align-items-center"><input type="checkbox" id="dia-4-aberto"> Quinta</label></td>
+                    <td><input class="form-control" type="time" id="dia-4-abre" aria-label="Quinta: abre às"></td>
+                    <td><input class="form-control" type="time" id="dia-4-fecha" aria-label="Quinta: fecha às"></td>
+                    <td><input class="form-control" type="time" id="dia-4-abre2" aria-label="Quinta: reabre às (opcional)"></td>
+                    <td><input class="form-control" type="time" id="dia-4-fecha2" aria-label="Quinta: fecha de novo às (opcional)"></td>
+                  </tr>
+                  <tr>
+                    <td><label class="d-flex gap-2 align-items-center"><input type="checkbox" id="dia-5-aberto"> Sexta</label></td>
+                    <td><input class="form-control" type="time" id="dia-5-abre" aria-label="Sexta: abre às"></td>
+                    <td><input class="form-control" type="time" id="dia-5-fecha" aria-label="Sexta: fecha às"></td>
+                    <td><input class="form-control" type="time" id="dia-5-abre2" aria-label="Sexta: reabre às (opcional)"></td>
+                    <td><input class="form-control" type="time" id="dia-5-fecha2" aria-label="Sexta: fecha de novo às (opcional)"></td>
+                  </tr>
+                  <tr>
+                    <td><label class="d-flex gap-2 align-items-center"><input type="checkbox" id="dia-6-aberto"> Sábado</label></td>
+                    <td><input class="form-control" type="time" id="dia-6-abre" aria-label="Sábado: abre às"></td>
+                    <td><input class="form-control" type="time" id="dia-6-fecha" aria-label="Sábado: fecha às"></td>
+                    <td><input class="form-control" type="time" id="dia-6-abre2" aria-label="Sábado: reabre às (opcional)"></td>
+                    <td><input class="form-control" type="time" id="dia-6-fecha2" aria-label="Sábado: fecha de novo às (opcional)"></td>
+                  </tr>
+                  <tr>
+                    <td><label class="d-flex gap-2 align-items-center"><input type="checkbox" id="dia-0-aberto"> Domingo</label></td>
+                    <td><input class="form-control" type="time" id="dia-0-abre" aria-label="Domingo: abre às"></td>
+                    <td><input class="form-control" type="time" id="dia-0-fecha" aria-label="Domingo: fecha às"></td>
+                    <td><input class="form-control" type="time" id="dia-0-abre2" aria-label="Domingo: reabre às (opcional)"></td>
+                    <td><input class="form-control" type="time" id="dia-0-fecha2" aria-label="Domingo: fecha de novo às (opcional)"></td>
+                  </tr>
+                </tbody>
+              </table>
+              </div>
+              <div class="mb-4"><label class="form-label" for="atendimento-observacaoHorarios">Observação (opcional)</label><input class="form-control" id="atendimento-observacaoHorarios" maxlength="160" placeholder="Ex.: fechado em feriados"></div>
+              <label class="d-flex gap-2 align-items-center mb-4"><input type="checkbox" id="atendimento-exibirHorarios"> Mostrar os horários no rodapé do site</label>
+              <div class="mb-5"><label class="form-label" for="operacao-fusoHorario">Fuso horário da loja</label>
+                <select class="form-control" id="operacao-fusoHorario" style="max-width: 24rem"></select>
+                <div class="suave fs-sm mt-1">Define o que é "hoje" nas datas dos pedidos e nos dias do resumo.</div></div>
+
+              <h2 class="fs-lg mb-2">Como o cliente recebe o pedido</h2>
+              <p class="suave fs-sm mb-4">O carrinho só oferece as opções ligadas aqui. Os textos aparecem para o cliente na hora de enviar o pedido.</p>
+              <label class="d-flex gap-2 align-items-center mb-2 fw-semibold"><input type="checkbox" id="retirada-ativa"> Retirada na loja</label>
+              <div class="mb-5"><label class="form-label" for="retirada-instrucoes">Informações da retirada (opcional)</label><textarea class="form-control" id="retirada-instrucoes" rows="2" maxlength="300" placeholder="Ex.: Rua das Flores, 10. Retirada das 9h às 18h."></textarea></div>
+              <label class="d-flex gap-2 align-items-center mb-2 fw-semibold"><input type="checkbox" id="entrega-ativa"> Entrega</label>
+              <div class="mb-4"><label class="form-label" for="entrega-taxa">Taxa de entrega (aparece ao lado da opção)</label><input class="form-control" id="entrega-taxa" maxlength="80" placeholder="Ex.: taxa a combinar, R$ 8,00, grátis no centro"></div>
+              <div class="mb-5"><label class="form-label" for="entrega-instrucoes">Informações da entrega (opcional)</label><textarea class="form-control" id="entrega-instrucoes" rows="2" maxlength="300" placeholder="Ex.: entregamos no centro e bairros vizinhos, de terça a sábado."></textarea></div>
               <button class="btn btn-solid theme-primary">Salvar</button>
             </form>
             <form class="painel mt-5" id="form-catalogo">

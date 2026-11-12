@@ -154,7 +154,29 @@ const App = (() => {
     location.href = '/';
   }
 
-  function montarRodape({ loja }) {
+  // "09:00" -> "9h"; "18:30" -> "18h30".
+  function horaCurta(hora) {
+    const [h, m] = hora.split(':');
+    return `${Number(h)}h${m === '00' ? '' : m}`;
+  }
+
+  // Junta dias seguidos com o mesmo horário: ["Seg a Sex: 9h às 18h", "Sáb: 9h às 13h", "Dom: fechado"].
+  function resumirHorarios(horarios) {
+    const NOMES = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const descrever = (d) => (!d.aberto ? 'fechado'
+      : `${horaCurta(d.abre)} às ${horaCurta(d.fecha)}${d.abre2 ? ` e ${horaCurta(d.abre2)} às ${horaCurta(d.fecha2)}` : ''}`);
+    const grupos = [];
+    for (const dia of [1, 2, 3, 4, 5, 6, 0]) { // a semana começa na segunda
+      const texto = descrever(horarios[dia]);
+      const ultimo = grupos.at(-1);
+      if (ultimo && ultimo.texto === texto) { ultimo.fim = dia; ultimo.dias++; } else grupos.push({ inicio: dia, fim: dia, dias: 1, texto });
+    }
+    // Dois dias: "Ter e Qua"; três ou mais: "Seg a Sex".
+    const periodo = (g) => (g.dias === 1 ? NOMES[g.inicio] : `${NOMES[g.inicio]} ${g.dias === 2 ? 'e' : 'a'} ${NOMES[g.fim]}`);
+    return grupos.map((g) => `${periodo(g)}: ${g.texto}`);
+  }
+
+  function montarRodape({ loja, atendimento }) {
     const contatos = [
       loja.whatsapp && `<a href="${linkWhats(loja.whatsapp)}" target="_blank" rel="noopener">WhatsApp ${formatarTelefone(loja.whatsapp)}</a>`,
       loja.instagram && `<a href="https://instagram.com/${esc(loja.instagram)}" target="_blank" rel="noopener">@${esc(loja.instagram)}</a>`,
@@ -164,7 +186,10 @@ const App = (() => {
       <footer class="rodape"><div class="container">
         <div class="marca mb-3">${esc(loja.nome)}</div>
         <div class="contatos mb-3">${contatos}</div>
-        <div class="suave fs-sm">${esc(loja.cidade)}</div>
+        <div class="suave fs-sm">${esc([loja.endereco, loja.cidade].filter(Boolean).join(' · '))}</div>
+        ${atendimento.exibirHorarios ? `
+        <div class="suave fs-sm mt-3"><strong>Horários:</strong> ${resumirHorarios(atendimento.horarios).map(esc).join(' · ')}${
+          atendimento.observacaoHorarios ? `<br>${esc(atendimento.observacaoHorarios)}` : ''}</div>` : ''}
       </div></footer>`;
   }
 
@@ -277,7 +302,7 @@ const App = (() => {
   };
 
   return {
-    esc, brl, lerPreco, dataBr, api, aviso, carrinho, fotoHtml, reduzirImagem, sair, STATUS, pronto, minusculas,
+    esc, brl, lerPreco, dataBr, api, aviso, carrinho, fotoHtml, reduzirImagem, sair, STATUS, pronto, minusculas, resumirHorarios,
     formatarTelefone, linkWhats, enderecoHtml, lerEndereco, ligarMascaras,
   };
 })();

@@ -1,7 +1,7 @@
 'use strict';
 // Carrinho + formulário de reserva do pedido.
 
-App.pronto.then(async ({ loja, admin, cliente, catalogo }) => {
+App.pronto.then(async ({ loja, admin, cliente, catalogo, atendimento }) => {
   const { esc, brl, api, aviso, carrinho, fotoHtml, minusculas } = App;
   const plural = esc(minusculas(catalogo.nomePlural));
   const conteudo = document.getElementById('conteudo');
@@ -17,8 +17,17 @@ App.pronto.then(async ({ loja, admin, cliente, catalogo }) => {
   // Cliente logado: os dados do cadastro já vêm preenchidos (e ainda podem ser ajustados neste pedido).
   const rascunho = {
     nome: cliente?.nome || '', telefone: App.formatarTelefone(cliente?.telefone), endereco: cliente?.endereco || {},
-    tipo: 'retirada', data: '', observacoes: '',
+    tipo: atendimento.retirada.ativa ? 'retirada' : 'entrega', data: '', observacoes: '',
   };
+
+  // Formas de receber o pedido que a loja oferece (Painel > Configurações), com as informações de cada uma.
+  const FORMAS = [
+    { tipo: 'retirada', rotulo: 'Retirar na loja', detalhe: atendimento.retirada.instrucoes },
+    { tipo: 'entrega', rotulo: `Entrega${atendimento.entrega.taxa ? ` (${atendimento.entrega.taxa})` : ''}`, detalhe: atendimento.entrega.instrucoes },
+  ].filter((forma) => atendimento[forma.tipo].ativa);
+  const formasHtml = () => FORMAS.map((forma) => `
+              <label class="d-flex gap-2 align-items-baseline mb-1"><input type="radio" name="tipo" value="${forma.tipo}" ${rascunho.tipo === forma.tipo ? 'checked' : ''}>
+                <span>${esc(forma.rotulo)}${forma.detalhe ? `<br><span class="suave fs-sm pre-linha">${esc(forma.detalhe)}</span>` : ''}</span></label>`).join('');
 
   // Pedido só com login: quem não entrou vê este convite no lugar do formulário (o carrinho fica guardado).
   const convite = admin ? `
@@ -85,8 +94,7 @@ App.pronto.then(async ({ loja, admin, cliente, catalogo }) => {
               <input class="form-control" id="data" type="date" required min="${hojeIso}" value="${esc(rascunho.data)}"></div>
             <fieldset class="mb-4">
               <legend class="form-label">Como prefere receber?</legend>
-              <label class="d-flex gap-2 align-items-center mb-1"><input type="radio" name="tipo" value="retirada" ${rascunho.tipo === 'retirada' ? 'checked' : ''}> Retirar na loja</label>
-              <label class="d-flex gap-2 align-items-center"><input type="radio" name="tipo" value="entrega" ${rascunho.tipo === 'entrega' ? 'checked' : ''}> Entrega (taxa a combinar)</label>
+              ${formasHtml()}
             </fieldset>
             <fieldset class="mb-4" id="grupo-endereco" ${rascunho.tipo === 'entrega' ? '' : 'hidden disabled'}>
               <legend class="form-label">Endereço de entrega</legend>
