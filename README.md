@@ -77,6 +77,7 @@ server.js        ponto de entrada: sobe o servidor e encaminha cada pedido para 
 src/ambiente.js  tudo o que vem de variáveis de ambiente (porta, endereço do site, proxy)
 src/rotas/       rotas da API por assunto: contas.js, catalogo.js, pedidos.js, loja.js
 src/configuracoes.js  configurações da loja: padrões, validação e o que é público (ver abaixo)
+src/tema.js      transforma as escolhas de aparência no CSS servido em /tema.css
 src/*.js         sessão, senhas, validação, datas, regras de pedidos, imagens e arquivos estáticos
 banco.js         camada de dados (SQLite): todas as consultas
 migracoes/       estrutura das tabelas, em arquivos numerados (ver abaixo)
@@ -100,10 +101,19 @@ Tudo o que é próprio de um estabelecimento fica no banco (tabela `config`) e p
 | `loja` | nome, slogan, WhatsApp, Instagram, e-mail, cidade | qualquer visitante |
 | `sobre` | texto, trajetória e foto da página Sobre | qualquer visitante |
 | `catalogo` | como a loja chama o que vende (ex.: Doce / Doces, Prato / Pratos) e o ícone de itens sem foto | qualquer visitante |
+| `tema` | cores, letra dos títulos, logotipo, ícone da aba e banner | qualquer visitante |
 | `operacao` | fuso horário da loja | só o painel |
 | `admin` | conta de acesso ao painel | ninguém (nunca sai do servidor) |
 
 O painel lê as seções editáveis em `GET /api/configuracoes` e grava uma seção em `PUT /api/configuracoes/<seção>`. Para criar uma configuração nova, acrescente o campo em `padrao` e em `validar` na seção certa; instalações antigas recebem o valor padrão sem precisar de migração.
+
+**Aparência (Painel > Aparência).** A loja escolhe a cor principal (botões, links, preços), a cor secundária (cabeçalho e rodapé), a letra dos títulos e envia logotipo, ícone da aba e banner da página inicial.
+
+- `css/site.css` traz o visual padrão em variáveis; o servidor gera `/tema.css`, carregado depois dele em todas as páginas, trocando só essas variáveis. Sem nada configurado, `/tema.css` vem vazio e o site fica com o visual padrão.
+- O sistema ajusta a legibilidade sozinho: se a cor principal for clara demais para texto, links e preços usam um tom mais escuro dela; se a cor secundária for escura, o texto do cabeçalho e do rodapé fica branco.
+- As letras são fontes que já vêm nos aparelhos (nada é baixado de outros sites). A lista fica em `src/tema.js`.
+- Imagens: JPG, PNG ou WebP, até 2 MB (o navegador reduz antes de enviar). Ficam em `data/uploads/`, junto com as fotos dos produtos.
+- Nenhum texto digitado vai direto para o CSS: cores só no formato `#rrggbb`, fonte só da lista, endereços de imagem só os gerados pelo servidor.
 
 **Fuso horário.** A data mínima dos pedidos ("de hoje em diante") e os dias do resumo seguem o fuso da loja, não o do servidor. O padrão é `America/Sao_Paulo`. Para uma loja em outro fuso (ex.: `America/Manaus`), grave `{"fusoHorario": "America/Manaus"}` em `/api/configuracoes/operacao`; o campo entra na tela de Configurações em uma etapa futura.
 

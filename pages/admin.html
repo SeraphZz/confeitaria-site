@@ -6,6 +6,8 @@
   <title>Painel</title>
   <link rel="stylesheet" href="/css/bootstrap.min.css">
   <link rel="stylesheet" href="/css/site.css">
+  <link rel="stylesheet" href="/tema.css">
+  <link rel="icon" href="/favicon.ico">
 </head>
 <body>
   <div id="cabecalho"></div>
@@ -20,6 +22,7 @@
         <button type="button" role="tab" data-aba="pedidos">Pedidos</button>
         <button type="button" role="tab" data-aba="clientes">Clientes</button>
         <button type="button" role="tab" data-aba="produtos">Produtos</button>
+        <button type="button" role="tab" data-aba="aparencia">Aparência</button>
         <button type="button" role="tab" data-aba="config">Configurações</button>
       </div>
 
@@ -75,6 +78,71 @@
           </div>
         </form>
         <div class="painel" id="lista-produtos"></div>
+      </section>
+
+      <section id="aba-aparencia" hidden>
+        <div class="row g-5">
+          <div class="col-12 lg:col-5">
+            <form class="painel" id="form-tema">
+              <h2 class="fs-lg mb-4">Cores e letras</h2>
+              <div class="mb-5">
+                <label class="form-label" for="tema-corPrincipal">Cor principal</label>
+                <p class="suave fs-sm mb-2">Botões, links e preços.</p>
+                <div class="amostra-cor">
+                  <input type="color" id="tema-corPrincipal">
+                  <span class="suave fs-sm" id="tema-corPrincipal-nota"></span>
+                  <button type="button" class="botao-texto" id="tema-corPrincipal-padrao">Voltar à cor padrão</button>
+                </div>
+              </div>
+              <div class="mb-5">
+                <label class="form-label" for="tema-corSecundaria">Cor secundária</label>
+                <p class="suave fs-sm mb-2">Fundo do cabeçalho e do rodapé. Pode ser clara ou escura: o texto se ajusta.</p>
+                <div class="amostra-cor">
+                  <input type="color" id="tema-corSecundaria">
+                  <span class="suave fs-sm" id="tema-corSecundaria-nota"></span>
+                  <button type="button" class="botao-texto" id="tema-corSecundaria-padrao">Voltar à cor padrão</button>
+                </div>
+              </div>
+              <div class="mb-5">
+                <label class="form-label" for="tema-fonteTitulos">Letra dos títulos</label>
+                <select class="form-control" id="tema-fonteTitulos"></select>
+              </div>
+              <button class="btn btn-solid theme-primary">Salvar e aplicar</button>
+            </form>
+          </div>
+          <div class="col-12 lg:col-7">
+            <div class="painel">
+              <h2 class="fs-lg mb-2">Imagens</h2>
+              <p class="suave fs-sm mb-4">JPG, PNG ou WebP. Cada imagem é salva assim que você escolhe o arquivo.</p>
+              <div class="row g-5">
+              <div class="col-12 md:col-4">
+                <h3 class="fs-md mb-1">Logotipo</h3>
+                <p class="suave fs-sm mb-3">Aparece no topo, ao lado do nome. Prefira PNG com fundo transparente.</p>
+                <div class="previa-imagem mb-3" id="previa-logo"></div>
+                <label class="form-label" for="arquivo-logo">Enviar imagem</label>
+                <input class="form-control" id="arquivo-logo" type="file" accept="image/jpeg,image/png,image/webp">
+                <button type="button" class="botao-texto mt-2" id="remover-logo" hidden>Remover</button>
+              </div>
+              <div class="col-12 md:col-4">
+                <h3 class="fs-md mb-1">Ícone da aba</h3>
+                <p class="suave fs-sm mb-3">O pequeno ícone na aba do navegador. Use uma imagem quadrada.</p>
+                <div class="previa-imagem mb-3" id="previa-favicon"></div>
+                <label class="form-label" for="arquivo-favicon">Enviar imagem</label>
+                <input class="form-control" id="arquivo-favicon" type="file" accept="image/jpeg,image/png,image/webp">
+                <button type="button" class="botao-texto mt-2" id="remover-favicon" hidden>Remover</button>
+              </div>
+              <div class="col-12 md:col-4">
+                <h3 class="fs-md mb-1">Banner</h3>
+                <p class="suave fs-sm mb-3">Foto de fundo do topo da página inicial.</p>
+                <div class="previa-imagem mb-3" id="previa-banner"></div>
+                <label class="form-label" for="arquivo-banner">Enviar imagem</label>
+                <input class="form-control" id="arquivo-banner" type="file" accept="image/jpeg,image/png,image/webp">
+                <button type="button" class="botao-texto mt-2" id="remover-banner" hidden>Remover</button>
+              </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section id="aba-config" hidden>

@@ -1,20 +1,23 @@
 'use strict';
 // Painel da loja: resumo com gráficos, pedidos, clientes, produtos e configurações.
 
-App.pronto.then(async ({ loja, admin, catalogo }) => {
+App.pronto.then(async ({ loja, admin, catalogo, tema }) => {
   if (!admin) return location.replace('/login');
   const { esc, brl, dataBr, api, aviso, minusculas } = App;
   const el = (id) => document.getElementById(id);
   document.title = `Painel · ${loja.nome}`;
 
   const STATUS = App.STATUS;
-  const COR = '#b8436a';
-  const COR_TEXTO = '#7d5c66';
-  const COR_GRADE = '#f3e3e7';
+  // Os gráficos usam as cores do tema da loja (variáveis de css/site.css, trocadas por /tema.css).
+  const corDoTema = (variavel) => getComputedStyle(document.documentElement).getPropertyValue(variavel).trim();
+  const COR = corDoTema('--destaque');
+  const COR_FORTE = corDoTema('--destaque-escuro');
+  const COR_TEXTO = corDoTema('--tinta-suave');
+  const COR_GRADE = corDoTema('--marca');
 
   // ------------------------------------------------------------ abas
-  const ABAS = ['resumo', 'pedidos', 'clientes', 'produtos', 'config'];
-  const carregar = { resumo: carregarResumo, pedidos: carregarPedidos, clientes: carregarClientes, produtos: carregarProdutos, config: carregarConfig };
+  const ABAS = ['resumo', 'pedidos', 'clientes', 'produtos', 'aparencia', 'config'];
+  const carregar = { resumo: carregarResumo, pedidos: carregarPedidos, clientes: carregarClientes, produtos: carregarProdutos, aparencia: carregarAparencia, config: carregarConfig };
 
   // A loja escolhe como chamar o que vende (doces, pratos, produtos...): os textos do painel seguem essa escolha.
   document.querySelector('[data-aba=produtos]').textContent = catalogo.nomePlural;
@@ -50,7 +53,7 @@ App.pronto.then(async ({ loja, admin, catalogo }) => {
       ticks: { color: COR_TEXTO, maxRotation: 0, autoSkipPadding: 12 } };
     graficos[id] = new Chart(el(id), {
       type: 'bar',
-      data: { labels: rotulos, datasets: [{ data: valores.map((v) => v / 100), backgroundColor: COR, hoverBackgroundColor: '#8a2f4d', borderRadius: 4, maxBarThickness: 36 }] },
+      data: { labels: rotulos, datasets: [{ data: valores.map((v) => v / 100), backgroundColor: COR, hoverBackgroundColor: COR_FORTE, borderRadius: 4, maxBarThickness: 36 }] },
       options: {
         indexAxis: horizontal ? 'y' : 'x', responsive: true, maintainAspectRatio: false,
         scales: horizontal ? { x: eixoValor, y: eixoCategoria } : { x: eixoCategoria, y: eixoValor },
@@ -272,6 +275,75 @@ App.pronto.then(async ({ loja, admin, catalogo }) => {
       aviso('Dados salvos.');
     } catch (erro) { tratarErro(erro); }
   });
+
+  // ------------------------------------------------------------ aparência (tema da loja)
+  // Cor vazia significa "usar a cor padrão do sistema"; o seletor de cor do navegador sempre mostra alguma, por isso
+  // o valor de verdade fica em `cores` e o seletor só reflete.
+  const COR_PADRAO = { corPrincipal: '#b8436a', corSecundaria: '#f8dde2' };
+  const IMAGENS_TEMA = {
+    logo: { maximo: 600, png: true },
+    favicon: { maximo: 192, png: true },
+    banner: { maximo: 1600, png: false },
+  };
+  let temaAtual = tema;
+  const cores = { corPrincipal: tema.corPrincipal, corSecundaria: tema.corSecundaria };
+  let aparenciaPronta = false;
+
+  function mostrarCor(campo) {
+    el(`tema-${campo}`).value = cores[campo] || COR_PADRAO[campo];
+    el(`tema-${campo}-nota`).textContent = cores[campo] ? cores[campo] : 'cor padrão';
+  }
+
+  function mostrarImagem(qual) {
+    const caminho = temaAtual[qual];
+    el(`previa-${qual}`).innerHTML = caminho ? `<img src="${esc(caminho)}" alt="">` : '<span class="suave fs-sm">Nenhuma imagem enviada.</span>';
+    el(`remover-${qual}`).hidden = !caminho;
+  }
+
+  async function carregarAparencia() {
+    if (!aparenciaPronta) {
+      const { fontes } = await api('/api/tema/opcoes');
+      el('tema-fonteTitulos').innerHTML = fontes.map((f) => `<option value="${esc(f.id)}">${esc(f.nome)}</option>`).join('');
+      aparenciaPronta = true;
+    }
+    el('tema-fonteTitulos').value = temaAtual.fonteTitulos;
+    for (const campo of Object.keys(cores)) mostrarCor(campo);
+    for (const qual of Object.keys(IMAGENS_TEMA)) mostrarImagem(qual);
+  }
+
+  for (const campo of Object.keys(cores)) {
+    el(`tema-${campo}`).addEventListener('input', (evento) => { cores[campo] = evento.target.value; mostrarCor(campo); });
+    el(`tema-${campo}-padrao`).addEventListener('click', () => { cores[campo] = ''; mostrarCor(campo); });
+  }
+
+  el('form-tema').addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    try {
+      await api('/api/configuracoes/tema', { metodo: 'PUT', corpo: { ...cores, fonteTitulos: el('tema-fonteTitulos').value } });
+      location.reload(); // as cores valem para a página inteira: recarregar aplica tudo de uma vez
+    } catch (erro) { tratarErro(erro); }
+  });
+
+  for (const [qual, opcoes] of Object.entries(IMAGENS_TEMA)) {
+    el(`arquivo-${qual}`).addEventListener('change', async (evento) => {
+      const arquivo = evento.target.files[0];
+      if (!arquivo) return;
+      try {
+        const imagem = await App.reduzirImagem(arquivo, opcoes).catch(() => { throw new Error('Não consegui ler essa imagem. Tente outra.'); });
+        temaAtual = await api(`/api/tema/imagem/${qual}`, { metodo: 'PUT', corpo: { imagem } });
+        mostrarImagem(qual);
+        aviso('Imagem salva. Recarregue a página para ver no site.');
+      } catch (erro) { tratarErro(erro); }
+      evento.target.value = '';
+    });
+    el(`remover-${qual}`).addEventListener('click', async () => {
+      try {
+        temaAtual = await api(`/api/tema/imagem/${qual}`, { metodo: 'PUT', corpo: { imagem: '' } });
+        mostrarImagem(qual);
+        aviso('Imagem removida.');
+      } catch (erro) { tratarErro(erro); }
+    });
+  }
 
   el('form-senha').addEventListener('submit', async (evento) => {
     evento.preventDefault();

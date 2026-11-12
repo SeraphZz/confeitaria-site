@@ -7,6 +7,7 @@ const { senhaConfere, novaSenha } = require('../senhas');
 const { derrubarOutrasSessoesAdmin } = require('../sessao');
 const { salvarImagem, removerImagem, LIMITE_JSON_COM_FOTO } = require('../imagens');
 const configuracoes = require('../configuracoes');
+const { FONTES, FONTE_PADRAO } = require('../tema');
 
 module.exports = [
   // Tudo o que o painel pode editar, de uma vez. Nunca inclui a conta de acesso.
@@ -25,6 +26,20 @@ module.exports = [
     if (imagem) salvarImagem(sobre, imagem, 'sobre'); else removerImagem(sobre);
     return configuracoes.substituir('sobre', sobre);
   }, true],
+
+  // Imagens do tema. Cada uma substitui a anterior; enviar vazio remove.
+  ['PUT', /^\/api\/tema\/imagem\/(logo|favicon|banner)$/, async (req, [qual]) => {
+    const { imagem } = await lerJson(req, LIMITE_JSON_COM_FOTO);
+    const tema = configuracoes.ler('tema');
+    const registro = { imagem: tema[qual] }; // salvarImagem/removerImagem trabalham com o campo `imagem`
+    if (imagem) salvarImagem(registro, imagem, qual); else removerImagem(registro);
+    return configuracoes.substituir('tema', { ...tema, [qual]: registro.imagem });
+  }, true],
+
+  // Opções que a tela de Aparência oferece (a lista de fontes fica só no servidor).
+  ['GET', /^\/api\/tema\/opcoes$/, () => ({
+    fontes: Object.entries(FONTES).map(([id, f]) => ({ id, nome: f.nome, css: f.css })), fontePadrao: FONTE_PADRAO,
+  }), true],
 
   ['PUT', /^\/api\/senha$/, async (req) => {
     limitar(`senha:${ipDe(req)}`, 8, 15 * 60 * 1000);

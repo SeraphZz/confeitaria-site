@@ -15,6 +15,7 @@ const banco = require('../banco');
 const { ErroHttp } = require('./http');
 const { texto } = require('./validacao');
 const { fusoValido } = require('./datas');
+const { FONTES, FONTE_PADRAO, normalizarCor } = require('./tema');
 
 const SECOES = {
   loja: {
@@ -63,6 +64,30 @@ const SECOES = {
       // Ícone mostrado no lugar da foto em produtos que ainda não têm uma.
       emojiPadrao: texto(corpo.emojiPadrao, { max: 8, campo: 'ícone padrão' }) || '🛍️',
     }),
+  },
+
+  // Aparência da loja. Vira CSS em src/tema.js (servido em /tema.css). Cor vazia = usar a cor padrão do sistema.
+  tema: {
+    publica: true,
+    editavel: true,
+    padrao: { corPrincipal: '', corSecundaria: '', fonteTitulos: FONTE_PADRAO, logo: '', favicon: '', banner: '' },
+    validar(corpo, atual) {
+      const cor = (valor, campo) => {
+        if (valor == null || valor === '') return '';
+        const normal = normalizarCor(valor);
+        if (!normal) throw new ErroHttp(400, `Cor inválida: ${campo}. Use o formato #rrggbb.`);
+        return normal;
+      };
+      const fonte = corpo.fonteTitulos == null || corpo.fonteTitulos === '' ? FONTE_PADRAO : corpo.fonteTitulos;
+      if (typeof fonte !== 'string' || !Object.hasOwn(FONTES, fonte)) throw new ErroHttp(400, 'Fonte inválida.');
+      return {
+        corPrincipal: cor(corpo.corPrincipal, 'cor principal'),
+        corSecundaria: cor(corpo.corSecundaria, 'cor secundária'),
+        fonteTitulos: fonte,
+        // As imagens têm rota própria (envio de arquivo): salvar as cores não mexe nelas.
+        logo: atual.logo || '', favicon: atual.favicon || '', banner: atual.banner || '',
+      };
+    },
   },
 
   operacao: {

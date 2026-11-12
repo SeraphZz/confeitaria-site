@@ -108,17 +108,22 @@ const App = (() => {
   });
 
   // Reduz a foto no navegador (máx. 1200px, JPEG) para o envio ser rápido mesmo pelo celular.
-  async function reduzirImagem(arquivo) {
+  // `png: true` mantém o fundo transparente (logotipo, ícone); `maximo` é o maior lado, em pixels.
+  async function reduzirImagem(arquivo, { maximo = 1200, png = false } = {}) {
     const bitmap = await createImageBitmap(arquivo);
-    const escala = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
+    const escala = Math.min(1, maximo / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(bitmap.width * escala);
     canvas.height = Math.round(bitmap.height * escala);
     canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.85);
+    return png ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.85);
   }
 
-  function montarCabecalho({ loja, admin, cliente, catalogo }) {
+  function montarCabecalho({ loja, admin, cliente, catalogo, tema }) {
+    // Com logotipo enviado, ele aparece ao lado do nome; sem, fica o ícone padrão do catálogo.
+    const simbolo = tema.logo
+      ? `<img class="marca-logo" src="${esc(tema.logo)}" alt="">`
+      : `<span class="marca-icone" aria-hidden="true">${esc(catalogo.emojiPadrao)} </span>`;
     const aqui = location.pathname;
     const elo = (href, rotulo, extra = '') =>
       `<a class="elo${aqui === href ? ' ativo' : ''}" href="${href}">${rotulo}${extra}</a>`;
@@ -129,7 +134,7 @@ const App = (() => {
       </div></div>` : '';
     document.getElementById('cabecalho').innerHTML = `${faixa}
       <header class="topo"><div class="container topo-linha">
-        <a class="marca" href="/"><span class="marca-icone" aria-hidden="true">🧁 </span>${esc(loja.nome)}</a>
+        <a class="marca" href="/">${simbolo}${esc(loja.nome)}</a>
         <nav class="d-flex align-items-center" aria-label="Principal">
           ${elo('/', esc(catalogo.nomePlural))}${elo('/sobre', 'Sobre')}
           ${elo('/carrinho', 'Carrinho', '<span class="contador" id="contador-carrinho" hidden>0</span>')}

@@ -6,6 +6,8 @@ const path = require('node:path');
 const { RAIZ } = require('./ambiente');
 const { CABECALHOS_SEGURANCA } = require('./http');
 const { UPLOADS_DIR } = require('./imagens');
+const configuracoes = require('./configuracoes');
+const { gerarCss, imagemSegura } = require('./tema');
 
 const PAGINAS = [
   [/^\/$/, 'index.html'],
@@ -53,6 +55,17 @@ function servirEstatico(caminho, res, consulta = '') {
   if (antigo) {
     res.writeHead(301, { Location: caminho.replace(antigo[0], antigo[1]) + consulta, ...CABECALHOS_SEGURANCA });
     return res.end();
+  }
+
+  // Aparência da loja: o CSS é montado a partir das configurações a cada pedido (ver src/tema.js).
+  if (caminho === '/tema.css') {
+    res.writeHead(200, { 'Content-Type': MIME['.css'], 'Cache-Control': 'no-cache', ...CABECALHOS_SEGURANCA });
+    return res.end(gerarCss(configuracoes.ler('tema')));
+  }
+  // Ícone da aba do navegador: a imagem enviada pela loja, se houver.
+  if (caminho === '/favicon.ico') {
+    const favicon = imagemSegura(configuracoes.ler('tema').favicon);
+    return favicon ? enviarArquivo(res, path.join(UPLOADS_DIR, path.basename(favicon))) : enviarArquivo404(res);
   }
 
   const pagina = PAGINAS.find(([re]) => re.test(caminho));
