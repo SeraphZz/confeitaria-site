@@ -78,6 +78,7 @@ src/ambiente.js  tudo o que vem de variáveis de ambiente (porta, endereço do s
 src/rotas/       rotas da API por assunto: contas.js, catalogo.js, pedidos.js, loja.js
 src/configuracoes.js  configurações da loja: padrões, validação e o que é público (ver abaixo)
 src/tema.js      transforma as escolhas de aparência no CSS servido em /tema.css
+src/aparencia.js rascunho, publicação e descarte do tema
 src/*.js         sessão, senhas, validação, datas, regras de pedidos, imagens e arquivos estáticos
 banco.js         camada de dados (SQLite): todas as consultas
 migracoes/       estrutura das tabelas, em arquivos numerados (ver abaixo)
@@ -101,7 +102,8 @@ Tudo o que é próprio de um estabelecimento fica no banco (tabela `config`) e p
 | `loja` | nome, slogan, WhatsApp, Instagram, e-mail, cidade | qualquer visitante |
 | `sobre` | texto, trajetória e foto da página Sobre | qualquer visitante |
 | `catalogo` | como a loja chama o que vende (ex.: Doce / Doces, Prato / Pratos) e o ícone de itens sem foto | qualquer visitante |
-| `tema` | cores, letra dos títulos, logotipo, ícone da aba e banner | qualquer visitante |
+| `tema` | cores, letra dos títulos, logotipo, ícone da aba e banner (versão publicada) | qualquer visitante |
+| `temaRascunho` | alterações de aparência ainda não publicadas | só o painel |
 | `operacao` | fuso horário da loja | só o painel |
 | `admin` | conta de acesso ao painel | ninguém (nunca sai do servidor) |
 
@@ -109,6 +111,8 @@ O painel lê as seções editáveis em `GET /api/configuracoes` e grava uma seç
 
 **Aparência (Painel > Aparência).** A loja escolhe a cor principal (botões, links, preços), a cor secundária (cabeçalho e rodapé), a letra dos títulos e envia logotipo, ícone da aba e banner da página inicial.
 
+- **Ver antes de publicar.** Tudo o que se altera na aba fica como rascunho. Quem está logado no painel passa a ver o site inteiro com a nova aparência (a faixa do topo avisa que é uma prévia); os clientes continuam vendo a versão publicada. Na própria aba há os botões **Publicar para os clientes** e **Descartar alterações**.
+- O rascunho fica no banco (configuração `temaRascunho`), então sobrevive a reinícios do servidor e vale para qualquer pessoa logada no painel. As regras estão em `src/aparencia.js`. Uma imagem só é apagada do disco quando nem o tema publicado nem o rascunho a usam mais.
 - `css/site.css` traz o visual padrão em variáveis; o servidor gera `/tema.css`, carregado depois dele em todas as páginas, trocando só essas variáveis. Sem nada configurado, `/tema.css` vem vazio e o site fica com o visual padrão.
 - O sistema ajusta a legibilidade sozinho: se a cor principal for clara demais para texto, links e preços usam um tom mais escuro dela; se a cor secundária for escura, o texto do cabeçalho e do rodapé fica branco.
 - As letras são fontes que já vêm nos aparelhos (nada é baixado de outros sites). A lista fica em `src/tema.js`.

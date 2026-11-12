@@ -8,6 +8,7 @@ const { derrubarOutrasSessoesAdmin } = require('../sessao');
 const { salvarImagem, removerImagem, LIMITE_JSON_COM_FOTO } = require('../imagens');
 const configuracoes = require('../configuracoes');
 const { FONTES, FONTE_PADRAO } = require('../tema');
+const aparencia = require('../aparencia');
 
 module.exports = [
   // Tudo o que o painel pode editar, de uma vez. Nunca inclui a conta de acesso.
@@ -27,19 +28,26 @@ module.exports = [
     return configuracoes.substituir('sobre', sobre);
   }, true],
 
-  // Imagens do tema. Cada uma substitui a anterior; enviar vazio remove.
-  ['PUT', /^\/api\/tema\/imagem\/(logo|favicon|banner)$/, async (req, [qual]) => {
+  // ---- Aparência: tudo o que se altera fica como rascunho até publicar (ver src/aparencia.js).
+  // Todas respondem { publicado, rascunho }: o que os clientes veem e o que está pendente (null = nada pendente).
+
+  // O que a tela de Aparência precisa para abrir (a lista de fontes fica só no servidor).
+  ['GET', /^\/api\/tema$/, () => ({
+    ...aparencia.estado(),
+    fontes: Object.entries(FONTES).map(([id, f]) => ({ id, nome: f.nome })), fontePadrao: FONTE_PADRAO,
+  }), true],
+
+  // Cores e letra dos títulos.
+  ['PUT', /^\/api\/tema\/rascunho$/, async (req) => aparencia.salvarRascunho(await lerJson(req)), true],
+
+  // Imagens: cada envio substitui a anterior no rascunho; enviar vazio remove.
+  ['PUT', /^\/api\/tema\/rascunho\/imagem\/(logo|favicon|banner)$/, async (req, [qual]) => {
     const { imagem } = await lerJson(req, LIMITE_JSON_COM_FOTO);
-    const tema = configuracoes.ler('tema');
-    const registro = { imagem: tema[qual] }; // salvarImagem/removerImagem trabalham com o campo `imagem`
-    if (imagem) salvarImagem(registro, imagem, qual); else removerImagem(registro);
-    return configuracoes.substituir('tema', { ...tema, [qual]: registro.imagem });
+    return aparencia.trocarImagem(qual, imagem || '');
   }, true],
 
-  // Opções que a tela de Aparência oferece (a lista de fontes fica só no servidor).
-  ['GET', /^\/api\/tema\/opcoes$/, () => ({
-    fontes: Object.entries(FONTES).map(([id, f]) => ({ id, nome: f.nome, css: f.css })), fontePadrao: FONTE_PADRAO,
-  }), true],
+  ['POST', /^\/api\/tema\/publicar$/, () => aparencia.publicar(), true],
+  ['DELETE', /^\/api\/tema\/rascunho$/, () => aparencia.descartar(), true],
 
   ['PUT', /^\/api\/senha$/, async (req) => {
     limitar(`senha:${ipDe(req)}`, 8, 15 * 60 * 1000);

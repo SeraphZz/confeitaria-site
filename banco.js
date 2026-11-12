@@ -60,6 +60,10 @@ function gravarConfig(chave, valor) {
     .run(chave, JSON.stringify(valor));
 }
 
+function apagarConfig(chave) {
+  sql('DELETE FROM config WHERE chave = ?').run(chave);
+}
+
 // ---------------------------------------------------------------- produtos
 
 const paraProduto = (l) => l && {
@@ -206,7 +210,7 @@ function importarJsonAntigo() {
 importarJsonAntigo();
 
 module.exports = {
-  DATA_DIR, ARQUIVO, transacao, lerConfig, gravarConfig,
+  DATA_DIR, ARQUIVO, transacao, lerConfig, gravarConfig, apagarConfig,
   listarProdutos, produtoPorId, produtoPorSlug, salvarProduto, apagarProduto,
   listarClientes, clientePorId, clientePorEmail, salvarCliente,
   inserirPedido, listarPedidos, pedidoPorId, mudarStatusPedido, contarPedidosComStatus, apagarPedidosDemo,

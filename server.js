@@ -29,7 +29,7 @@ async function atender(req, res) {
 
   if (!caminho.startsWith('/api/')) {
     if (req.method !== 'GET' && req.method !== 'HEAD') throw new ErroHttp(405, 'Método não permitido.');
-    return servirEstatico(caminho, res, url.search);
+    return servirEstatico(req, caminho, res, url.search);
   }
 
   for (const [metodo, re, handler, exigeAdmin] of rotas) {

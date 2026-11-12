@@ -81,6 +81,16 @@
       </section>
 
       <section id="aba-aparencia" hidden>
+        <div class="painel-edicao mb-5" id="tema-pendente" role="status" hidden>
+          <h2 class="fs-lg mb-2">Você tem alterações não publicadas</h2>
+          <p class="mb-4">Você já está vendo o site com a nova aparência, em todas as páginas. <strong>Seus clientes ainda veem a versão publicada.</strong> Navegue à vontade para conferir e, quando estiver do seu gosto, publique.</p>
+          <div class="d-flex flex-wrap gap-3">
+            <button type="button" class="btn btn-solid theme-primary" id="tema-publicar">Publicar para os clientes</button>
+            <a class="btn btn-outline theme-primary" href="/">Ver a página inicial</a>
+            <button type="button" class="btn btn-outline theme-primary" id="tema-descartar">Descartar alterações</button>
+          </div>
+        </div>
+        <p class="suave mb-5" id="tema-em-dia">O que você alterar aqui fica primeiro só para você: dá para ver como o site fica antes de publicar para os clientes.</p>
         <div class="row g-5">
           <div class="col-12 lg:col-5">
             <form class="painel" id="form-tema">
@@ -107,13 +117,13 @@
                 <label class="form-label" for="tema-fonteTitulos">Letra dos títulos</label>
                 <select class="form-control" id="tema-fonteTitulos"></select>
               </div>
-              <button class="btn btn-solid theme-primary">Salvar e aplicar</button>
+              <button class="btn btn-solid theme-primary">Ver como fica</button>
             </form>
           </div>
           <div class="col-12 lg:col-7">
             <div class="painel">
               <h2 class="fs-lg mb-2">Imagens</h2>
-              <p class="suave fs-sm mb-4">JPG, PNG ou WebP. Cada imagem é salva assim que você escolhe o arquivo.</p>
+              <p class="suave fs-sm mb-4">JPG, PNG ou WebP. A imagem entra na prévia assim que você escolhe o arquivo; os clientes só veem depois de publicar.</p>
               <div class="row g-5">
               <div class="col-12 md:col-4">
                 <h3 class="fs-md mb-1">Logotipo</h3>

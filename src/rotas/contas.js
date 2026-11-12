@@ -9,6 +9,7 @@ const { senhaConfere, novaSenha } = require('../senhas');
 const { clienteLogado, exigirCliente, abrirSessao, encerrarSessao, derrubarSessoesDoCliente, ehAdmin } = require('../sessao');
 const { enviarLinkRedefinicao, conferirToken } = require('../redefinicao');
 const configuracoes = require('../configuracoes');
+const { temaPara, temRascunho } = require('../aparencia');
 
 // O que pode sair do servidor sobre um cliente (nunca salt/hash).
 function clientePublico(c) {
@@ -16,10 +17,15 @@ function clientePublico(c) {
 }
 
 module.exports = [
-  ['GET', /^\/api\/site$/, (req) => ({
-    // Só as seções marcadas como públicas em src/configuracoes.js saem daqui.
-    ...configuracoes.publicas(), admin: ehAdmin(req), cliente: clientePublico(clienteLogado(req)),
-  })],
+  ['GET', /^\/api\/site$/, (req) => {
+    const admin = ehAdmin(req);
+    return {
+      // Só as seções marcadas como públicas em src/configuracoes.js saem daqui.
+      ...configuracoes.publicas(), admin, cliente: clientePublico(clienteLogado(req)),
+      // Quem está no painel navega vendo o rascunho da aparência, se houver; `previaTema` avisa a tela disso.
+      tema: temaPara(admin), previaTema: admin && temRascunho(),
+    };
+  }],
 
   ['POST', /^\/api\/login$/, async (req, _p, res) => {
     limitar(`login:${ipDe(req)}`, 8, 15 * 60 * 1000);

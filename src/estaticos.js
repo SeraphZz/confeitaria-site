@@ -6,8 +6,9 @@ const path = require('node:path');
 const { RAIZ } = require('./ambiente');
 const { CABECALHOS_SEGURANCA } = require('./http');
 const { UPLOADS_DIR } = require('./imagens');
-const configuracoes = require('./configuracoes');
 const { gerarCss, imagemSegura } = require('./tema');
+const { temaPara } = require('./aparencia');
+const { ehAdmin } = require('./sessao');
 
 const PAGINAS = [
   [/^\/$/, 'index.html'],
@@ -29,11 +30,11 @@ const MIME = {
   '.map': 'application/json', '.json': 'application/json', '.jpg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
 };
 
-function enviarArquivo(res, arquivo, status = 200) {
+function enviarArquivo(res, arquivo, status = 200, extras = {}) {
   const tipo = MIME[path.extname(arquivo).toLowerCase()];
   fs.readFile(arquivo, (erro, conteudo) => {
     if (erro || !tipo) return enviarArquivo404(res);
-    res.writeHead(status, { 'Content-Type': tipo, 'Cache-Control': 'no-cache', ...CABECALHOS_SEGURANCA });
+    res.writeHead(status, { 'Content-Type': tipo, 'Cache-Control': 'no-cache', ...CABECALHOS_SEGURANCA, ...extras });
     res.end(conteudo);
   });
 }
@@ -50,7 +51,7 @@ const REDIRECIONAMENTOS = [
 ];
 
 // `consulta` é o que vem depois do "?" no endereço (com o "?"), mantido ao redirecionar.
-function servirEstatico(caminho, res, consulta = '') {
+function servirEstatico(req, caminho, res, consulta = '') {
   const antigo = REDIRECIONAMENTOS.find(([re]) => re.test(caminho));
   if (antigo) {
     res.writeHead(301, { Location: caminho.replace(antigo[0], antigo[1]) + consulta, ...CABECALHOS_SEGURANCA });
@@ -58,14 +59,16 @@ function servirEstatico(caminho, res, consulta = '') {
   }
 
   // Aparência da loja: o CSS é montado a partir das configurações a cada pedido (ver src/tema.js).
+  // Quem está logado no painel recebe o rascunho, se houver; os demais, o tema publicado (ver src/aparencia.js).
+  // A resposta depende do cookie de sessão, então nenhum cache no caminho pode guardá-la para outra pessoa.
   if (caminho === '/tema.css') {
-    res.writeHead(200, { 'Content-Type': MIME['.css'], 'Cache-Control': 'no-cache', ...CABECALHOS_SEGURANCA });
-    return res.end(gerarCss(configuracoes.ler('tema')));
+    res.writeHead(200, { 'Content-Type': MIME['.css'], 'Cache-Control': 'private, no-cache', Vary: 'Cookie', ...CABECALHOS_SEGURANCA });
+    return res.end(gerarCss(temaPara(ehAdmin(req))));
   }
   // Ícone da aba do navegador: a imagem enviada pela loja, se houver.
   if (caminho === '/favicon.ico') {
-    const favicon = imagemSegura(configuracoes.ler('tema').favicon);
-    return favicon ? enviarArquivo(res, path.join(UPLOADS_DIR, path.basename(favicon))) : enviarArquivo404(res);
+    const favicon = imagemSegura(temaPara(ehAdmin(req)).favicon);
+    return favicon ? enviarArquivo(res, path.join(UPLOADS_DIR, path.basename(favicon)), 200, { 'Cache-Control': 'private, no-cache', Vary: 'Cookie' }) : enviarArquivo404(res);
   }
 
   const pagina = PAGINAS.find(([re]) => re.test(caminho));

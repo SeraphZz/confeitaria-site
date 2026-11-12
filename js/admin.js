@@ -1,7 +1,7 @@
 'use strict';
 // Painel da loja: resumo com gráficos, pedidos, clientes, produtos e configurações.
 
-App.pronto.then(async ({ loja, admin, catalogo, tema }) => {
+App.pronto.then(async ({ loja, admin, catalogo }) => {
   if (!admin) return location.replace('/login');
   const { esc, brl, dataBr, api, aviso, minusculas } = App;
   const el = (id) => document.getElementById(id);
@@ -277,6 +277,8 @@ App.pronto.then(async ({ loja, admin, catalogo, tema }) => {
   });
 
   // ------------------------------------------------------------ aparência (tema da loja)
+  // Tudo o que se altera aqui fica como rascunho: quem está no painel já vê o site com as alterações (prévia),
+  // e os clientes só veem depois de Publicar.
   // Cor vazia significa "usar a cor padrão do sistema"; o seletor de cor do navegador sempre mostra alguma, por isso
   // o valor de verdade fica em `cores` e o seletor só reflete.
   const COR_PADRAO = { corPrincipal: '#b8436a', corSecundaria: '#f8dde2' };
@@ -285,9 +287,10 @@ App.pronto.then(async ({ loja, admin, catalogo, tema }) => {
     favicon: { maximo: 192, png: true },
     banner: { maximo: 1600, png: false },
   };
-  let temaAtual = tema;
-  const cores = { corPrincipal: tema.corPrincipal, corSecundaria: tema.corSecundaria };
-  let aparenciaPronta = false;
+  let aparencia = null;            // { publicado, rascunho } vindo do servidor
+  let fontesCarregadas = false;
+  const cores = { corPrincipal: '', corSecundaria: '' };
+  const emEdicao = () => aparencia.rascunho || aparencia.publicado; // o que os campos mostram
 
   function mostrarCor(campo) {
     el(`tema-${campo}`).value = cores[campo] || COR_PADRAO[campo];
@@ -295,53 +298,80 @@ App.pronto.then(async ({ loja, admin, catalogo, tema }) => {
   }
 
   function mostrarImagem(qual) {
-    const caminho = temaAtual[qual];
+    const caminho = emEdicao()[qual];
     el(`previa-${qual}`).innerHTML = caminho ? `<img src="${esc(caminho)}" alt="">` : '<span class="suave fs-sm">Nenhuma imagem enviada.</span>';
     el(`remover-${qual}`).hidden = !caminho;
   }
 
-  async function carregarAparencia() {
-    if (!aparenciaPronta) {
-      const { fontes } = await api('/api/tema/opcoes');
-      el('tema-fonteTitulos').innerHTML = fontes.map((f) => `<option value="${esc(f.id)}">${esc(f.nome)}</option>`).join('');
-      aparenciaPronta = true;
-    }
-    el('tema-fonteTitulos').value = temaAtual.fonteTitulos;
-    for (const campo of Object.keys(cores)) mostrarCor(campo);
+  function mostrarAparencia() {
+    const pendente = Boolean(aparencia.rascunho);
+    el('tema-pendente').hidden = !pendente;
+    el('tema-em-dia').hidden = pendente;
+    el('tema-fonteTitulos').value = emEdicao().fonteTitulos;
+    for (const campo of Object.keys(cores)) { cores[campo] = emEdicao()[campo]; mostrarCor(campo); }
     for (const qual of Object.keys(IMAGENS_TEMA)) mostrarImagem(qual);
   }
+
+  async function carregarAparencia() {
+    const resposta = await api('/api/tema');
+    if (!fontesCarregadas) {
+      el('tema-fonteTitulos').innerHTML = resposta.fontes.map((f) => `<option value="${esc(f.id)}">${esc(f.nome)}</option>`).join('');
+      fontesCarregadas = true;
+    }
+    aparencia = { publicado: resposta.publicado, rascunho: resposta.rascunho };
+    mostrarAparencia();
+  }
+
+  // As cores e a letra valem para a página inteira: recarregar mostra a prévia (ou o resultado) de uma vez.
+  // `mudou` evita recarregar quando o servidor concluiu que nada mudou.
+  async function enviarAparencia(pedido, { mensagem }) {
+    if (!aparencia) return; // a aba ainda está carregando
+    try {
+      const antes = JSON.stringify(aparencia);
+      aparencia = await pedido();
+      if (JSON.stringify(aparencia) === antes) { mostrarAparencia(); return aviso('Nada mudou.'); }
+      sessionStorage.setItem('aviso-aparencia', mensagem);
+      location.reload();
+    } catch (erro) { tratarErro(erro); }
+  }
+  // Depois de recarregar, conta o que aconteceu.
+  const avisoPendente = sessionStorage.getItem('aviso-aparencia');
+  if (avisoPendente) { sessionStorage.removeItem('aviso-aparencia'); aviso(avisoPendente); }
 
   for (const campo of Object.keys(cores)) {
     el(`tema-${campo}`).addEventListener('input', (evento) => { cores[campo] = evento.target.value; mostrarCor(campo); });
     el(`tema-${campo}-padrao`).addEventListener('click', () => { cores[campo] = ''; mostrarCor(campo); });
   }
 
-  el('form-tema').addEventListener('submit', async (evento) => {
+  el('form-tema').addEventListener('submit', (evento) => {
     evento.preventDefault();
-    try {
-      await api('/api/configuracoes/tema', { metodo: 'PUT', corpo: { ...cores, fonteTitulos: el('tema-fonteTitulos').value } });
-      location.reload(); // as cores valem para a página inteira: recarregar aplica tudo de uma vez
-    } catch (erro) { tratarErro(erro); }
+    enviarAparencia(() => api('/api/tema/rascunho', { metodo: 'PUT', corpo: { ...cores, fonteTitulos: el('tema-fonteTitulos').value } }),
+      { mensagem: 'Prévia atualizada. Só você está vendo; publique quando estiver do seu gosto.' });
+  });
+
+  el('tema-publicar').addEventListener('click', () => {
+    if (!confirm('Publicar a nova aparência? Todos os clientes passam a ver o site assim.')) return;
+    enviarAparencia(() => api('/api/tema/publicar', { metodo: 'POST', corpo: {} }), { mensagem: 'Aparência publicada. Seus clientes já veem o site assim.' });
+  });
+
+  el('tema-descartar').addEventListener('click', () => {
+    if (!confirm('Descartar as alterações? A aparência volta a ser a que está publicada.')) return;
+    enviarAparencia(() => api('/api/tema/rascunho', { metodo: 'DELETE' }), { mensagem: 'Alterações descartadas.' });
   });
 
   for (const [qual, opcoes] of Object.entries(IMAGENS_TEMA)) {
-    el(`arquivo-${qual}`).addEventListener('change', async (evento) => {
+    el(`arquivo-${qual}`).addEventListener('change', (evento) => {
       const arquivo = evento.target.files[0];
       if (!arquivo) return;
-      try {
+      enviarAparencia(async () => {
         const imagem = await App.reduzirImagem(arquivo, opcoes).catch(() => { throw new Error('Não consegui ler essa imagem. Tente outra.'); });
-        temaAtual = await api(`/api/tema/imagem/${qual}`, { metodo: 'PUT', corpo: { imagem } });
-        mostrarImagem(qual);
-        aviso('Imagem salva. Recarregue a página para ver no site.');
-      } catch (erro) { tratarErro(erro); }
+        return api(`/api/tema/rascunho/imagem/${qual}`, { metodo: 'PUT', corpo: { imagem } });
+      }, { mensagem: 'Imagem adicionada à prévia. Só você está vendo; publique quando estiver do seu gosto.' });
       evento.target.value = '';
     });
-    el(`remover-${qual}`).addEventListener('click', async () => {
-      try {
-        temaAtual = await api(`/api/tema/imagem/${qual}`, { metodo: 'PUT', corpo: { imagem: '' } });
-        mostrarImagem(qual);
-        aviso('Imagem removida.');
-      } catch (erro) { tratarErro(erro); }
+    el(`remover-${qual}`).addEventListener('click', () => {
+      enviarAparencia(() => api(`/api/tema/rascunho/imagem/${qual}`, { metodo: 'PUT', corpo: { imagem: '' } }),
+        { mensagem: 'Imagem removida da prévia. Publique para valer para os clientes.' });
     });
   }
 

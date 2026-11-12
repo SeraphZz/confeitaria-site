@@ -67,9 +67,11 @@ const SECOES = {
   },
 
   // Aparência da loja. Vira CSS em src/tema.js (servido em /tema.css). Cor vazia = usar a cor padrão do sistema.
+  // Não é editável pela rota genérica: as alterações passam pelo rascunho e só valem depois de publicadas
+  // (ver src/aparencia.js).
   tema: {
     publica: true,
-    editavel: true,
+    editavel: false,
     padrao: { corPrincipal: '', corSecundaria: '', fonteTitulos: FONTE_PADRAO, logo: '', favicon: '', banner: '' },
     validar(corpo, atual) {
       const cor = (valor, campo) => {
@@ -101,6 +103,9 @@ const SECOES = {
     },
   },
 
+  // Alterações de aparência ainda não publicadas (mesmo formato de `tema`). Só quem está no painel vê.
+  temaRascunho: { publica: false, editavel: false, padrao: null },
+
   // Conta de acesso ao painel: { usuario, salt, hash, senhaInicial }. Interna: nunca é devolvida ao navegador.
   admin: { publica: false, editavel: false, padrao: null },
 };
@@ -123,6 +128,16 @@ function substituir(nome, valor) {
   secao(nome);
   banco.gravarConfig(nome, valor);
   return valor;
+}
+
+function remover(nome) {
+  secao(nome);
+  banco.apagarConfig(nome);
+}
+
+// Aplica as regras de uma seção ao que veio do navegador, sem gravar. `atual` é o valor de onde se parte.
+function validar(nome, corpo, atual = ler(nome)) {
+  return secao(nome).validar(corpo, atual);
 }
 
 // Grava o que veio do painel, depois de validar. Só para seções editáveis.
@@ -148,4 +163,4 @@ const editaveis = () => lerVarias((s) => s.editavel);
 
 const fusoHorario = () => ler('operacao').fusoHorario;
 
-module.exports = { ler, gravar, substituir, publicas, editaveis, fusoHorario };
+module.exports = { ler, gravar, substituir, remover, validar, publicas, editaveis, fusoHorario };
