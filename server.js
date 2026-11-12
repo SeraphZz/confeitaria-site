@@ -1,6 +1,6 @@
 'use strict';
 // Backend da confeitaria — Node puro, sem dependências (não precisa de `npm install`).
-// Dados ficam em data/db.json; fotos enviadas em data/uploads/.
+// Dados ficam em data/loja.db (SQLite, ver banco.js); fotos enviadas em data/uploads/.
 
 const http = require('node:http');
 const fs = require('node:fs');
@@ -9,9 +9,8 @@ const crypto = require('node:crypto');
 
 const PORT = Number(process.env.PORT) || 3000;
 const ROOT = __dirname;
-const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(ROOT, 'data');
-const DB_FILE = path.join(DATA_DIR, 'db.json');
-const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
+const banco = require('./banco');
+const UPLOADS_DIR = path.join(banco.DATA_DIR, 'uploads');
 const PRODUCAO = process.env.NODE_ENV === 'production';
 // Endereço público do site, usado nos links enviados por e-mail. Nunca é lido da requisição:
 // o cabeçalho Host é controlado por quem faz o pedido e poderia apontar o link para outro site.
@@ -22,11 +21,7 @@ const STATUS = ['novo', 'confirmado', 'producao', 'pronto', 'entregue', 'cancela
 const STATUS_ABERTOS = ['novo', 'confirmado', 'producao', 'pronto'];
 const SESSAO_MS = 12 * 60 * 60 * 1000;
 
-// ---------------------------------------------------------------- banco (arquivo JSON)
-
-function ENDERECO_VAZIO() {
-  return { cep: '', rua: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '' };
-}
+// ---------------------------------------------------------------- primeiro uso
 
 function hashSenha(senha, salt) {
   return crypto.scryptSync(senha, salt, 64).toString('hex');
@@ -40,18 +35,25 @@ function criarSlug(nome, existentes) {
   return slug;
 }
 
-function criarBanco() {
+// Banco vazio (primeira execução): cria a loja de exemplo e a conta da confeiteira.
+function criarDadosIniciais() {
   const seed = require('./seed');
   const senha = process.env.ADMIN_PASSWORD || crypto.randomBytes(9).toString('base64url');
   const salt = crypto.randomBytes(16).toString('hex');
-  const doces = [];
-  for (const d of seed.doces) {
-    doces.push({
-      id: crypto.randomUUID(), slug: criarSlug(d.nome, doces.map((x) => x.slug)),
-      nome: d.nome, descricao: d.descricao, preco: d.preco, unidade: d.unidade,
-      emoji: d.emoji, imagem: '', disponivel: true,
-    });
-  }
+  banco.transacao(() => {
+    const slugs = [];
+    for (const d of seed.doces) {
+      const slug = criarSlug(d.nome, slugs);
+      slugs.push(slug);
+      banco.salvarDoce({
+        id: crypto.randomUUID(), slug, nome: d.nome, descricao: d.descricao, preco: d.preco,
+        unidade: d.unidade, emoji: d.emoji, imagem: '', disponivel: true,
+      });
+    }
+    banco.gravarConfig('loja', seed.loja);
+    banco.gravarConfig('sobre', seed.sobre);
+    banco.gravarConfig('admin', { usuario: 'confeiteira', salt, hash: hashSenha(senha, salt), senhaInicial: true });
+  });
   if (!process.env.ADMIN_PASSWORD) {
     console.log('\n==============================================');
     console.log(' Primeiro acesso da confeiteira');
@@ -60,32 +62,10 @@ function criarBanco() {
     console.log(' Troque a senha em Painel > Configurações.');
     console.log('==============================================\n');
   }
-  return {
-    loja: seed.loja, sobre: seed.sobre, doces, pedidos: [], proximoNumero: 1,
-    admin: { usuario: 'confeiteira', salt, hash: hashSenha(senha, salt), senhaInicial: true },
-  };
 }
 
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-let db;
-if (fs.existsSync(DB_FILE)) {
-  db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-} else {
-  db = criarBanco();
-  salvar();
-}
-db.clientes ||= []; // bancos criados antes do cadastro de clientes
-for (const c of db.clientes) {
-  // Endereço era um texto só; agora é separado por campos (CEP, rua, número...).
-  if (typeof c.endereco !== 'object' || !c.endereco) c.endereco = { ...ENDERECO_VAZIO(), rua: String(c.endereco || '') };
-}
-
-// Grava em arquivo temporário e renomeia, para nunca deixar o db.json pela metade.
-function salvar() {
-  const tmp = DB_FILE + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
-  fs.renameSync(tmp, DB_FILE);
-}
+if (!banco.lerConfig('admin')) criarDadosIniciais();
 
 // ---------------------------------------------------------------- utilidades HTTP
 
@@ -138,6 +118,15 @@ function lerJson(req, limiteBytes = 100 * 1024) {
     });
     req.on('error', reject);
   });
+}
+
+// IP de quem fez o pedido. Atrás de um proxy (HTTPS da hospedagem, Caddy, Nginx) a conexão chega sempre com o IP
+// do proxy, e o IP real vem no cabeçalho X-Forwarded-For. Só confiamos nele com TRUST_PROXY=1, porque sem proxy
+// qualquer pessoa pode inventar esse cabeçalho. Vale o último item da lista: é o que o proxy escreveu.
+const CONFIAR_NO_PROXY = process.env.TRUST_PROXY === '1';
+function ipDe(req) {
+  const encaminhado = CONFIAR_NO_PROXY && String(req.headers['x-forwarded-for'] || '').split(',').pop().trim();
+  return encaminhado || req.socket.remoteAddress;
 }
 
 // Limite simples de tentativas por chave (IP), em memória.
@@ -203,7 +192,7 @@ function ehAdmin(req) {
 
 function clienteLogado(req) {
   const sessao = sessaoDe(req);
-  return (sessao?.tipo === 'cliente' && db.clientes.find((c) => c.id === sessao.clienteId)) || null;
+  return (sessao?.tipo === 'cliente' && banco.clientePorId(sessao.clienteId)) || null;
 }
 
 function exigirCliente(req) {
@@ -222,7 +211,7 @@ function cookieSessao(token, maxAgeSeg) {
   return `sid=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeg}${PRODUCAO ? '; Secure' : ''}`;
 }
 
-// Serve para a confeiteira (db.admin) e para clientes: ambos guardam { salt, hash }.
+// Serve para a confeiteira (config 'admin') e para clientes: ambos guardam { salt, hash }.
 function senhaConfere(senha, conta) {
   if (typeof senha !== 'string' || senha.length > 200) return false;
   const a = Buffer.from(hashSenha(senha, conta.salt), 'hex');
@@ -286,9 +275,10 @@ function enviarLinkRedefinicao(cliente) {
     if (PRODUCAO) return console.error('Redefinição de senha pedida, mas o SMTP não está configurado (veja o README).');
     return console.log(`\n[e-mail não configurado] Link de redefinição para ${cliente.email}:\n${link}\n`);
   }
+  const loja = banco.lerConfig('loja');
   email.enviarEmail({
-    para: cliente.email, nomeRemetente: db.loja.nome, assunto: `Redefinir sua senha - ${db.loja.nome}`,
-    texto: `Olá, ${cliente.nome}!\n\nRecebemos um pedido para redefinir a senha da sua conta em ${db.loja.nome}.\n` +
+    para: cliente.email, nomeRemetente: loja.nome, assunto: `Redefinir sua senha - ${loja.nome}`,
+    texto: `Olá, ${cliente.nome}!\n\nRecebemos um pedido para redefinir a senha da sua conta em ${loja.nome}.\n` +
       `Para criar uma nova senha, abra o link abaixo (ele vale por 30 minutos):\n\n${link}\n\n` +
       'Se não foi você, é só ignorar este e-mail: sua senha continua a mesma.\n',
   }).catch((erro) => console.error('Falha ao enviar e-mail de redefinição:', erro.message));
@@ -302,7 +292,7 @@ function clientePublico(c) {
 // ---------------------------------------------------------------- regras de negócio
 
 function acharDoce(id) {
-  const doce = db.doces.find((d) => d.id === id);
+  const doce = banco.docePorId(id);
   if (!doce) throw new ErroHttp(404, 'Doce não encontrado.');
   return doce;
 }
@@ -316,7 +306,7 @@ function aplicarCamposDoce(doce, corpo) {
   if ('disponivel' in corpo) doce.disponivel = Boolean(corpo.disponivel);
 }
 
-function criarPedido(corpo, clienteId) {
+function criarPedido(corpo, conta) {
   const cliente = corpo.cliente || {};
   const entrega = corpo.entrega || {};
   const nome = texto(cliente.nome, { max: 80, obrigatorio: true, campo: 'nome' });
@@ -334,7 +324,7 @@ function criarPedido(corpo, clienteId) {
   }
   // Preço e nome vêm sempre do banco — nunca do que o navegador enviou.
   const itens = corpo.itens.map((item) => {
-    const doce = db.doces.find((d) => d.id === (item && item.doceId));
+    const doce = item && typeof item.doceId === 'string' ? banco.docePorId(item.doceId) : null;
     if (!doce || !doce.disponivel) throw new ErroHttp(409, 'Um dos doces do carrinho não está mais disponível. Atualize a página.');
     return {
       doceId: doce.id, nome: doce.nome, precoUnit: doce.preco,
@@ -344,26 +334,26 @@ function criarPedido(corpo, clienteId) {
   });
 
   const pedido = {
-    id: crypto.randomUUID(), numero: db.proximoNumero++, criadoEm: new Date().toISOString(),
-    clienteId: clienteId || null, cliente: { nome, telefone }, entrega: { tipo, data, endereco: endereco ? formatarEndereco(endereco) : '' },
+    id: crypto.randomUUID(), criadoEm: new Date().toISOString(),
+    clienteId: conta.id, cliente: { nome, telefone }, entrega: { tipo, data, endereco: endereco ? formatarEndereco(endereco) : '' },
     itens, observacoes: texto(corpo.observacoes, { max: 500, campo: 'observações' }),
     total: itens.reduce((s, i) => s + i.precoUnit * i.quantidade, 0), status: 'novo',
   };
-  db.pedidos.push(pedido);
-  // Primeira entrega de quem ainda não tinha endereço no cadastro: guarda para os próximos pedidos.
-  const conta = endereco && db.clientes.find((c) => c.id === clienteId);
-  if (conta && !conta.endereco.cep) conta.endereco = endereco;
-  salvar();
+  banco.transacao(() => {
+    pedido.numero = banco.inserirPedido(pedido);
+    // Primeira entrega de quem ainda não tinha endereço no cadastro: guarda para os próximos pedidos.
+    if (endereco && !conta.endereco.cep) banco.salvarCliente({ ...conta, endereco });
+  });
   return pedido;
 }
 
 // Agrupa os pedidos por pessoa: pela conta, quando o cliente estava logado; senão pelo telefone.
 function montarClientes() {
   const pessoas = new Map();
-  for (const c of db.clientes) {
+  for (const c of banco.listarClientes()) {
     pessoas.set(c.id, { nome: c.nome, telefone: c.telefone, email: c.email, cadastrado: true, pedidos: [] });
   }
-  for (const p of db.pedidos) {
+  for (const p of banco.listarPedidos()) {
     const chave = p.clienteId && pessoas.has(p.clienteId) ? p.clienteId : `tel:${p.cliente.telefone}`;
     if (!pessoas.has(chave)) {
       pessoas.set(chave, { nome: p.cliente.nome, telefone: p.cliente.telefone, email: '', cadastrado: false, pedidos: [] });
@@ -398,10 +388,11 @@ function montarDashboard(dias) {
 
   const porDoce = new Map();
   const status = Object.fromEntries(STATUS.map((s) => [s, 0]));
-  let receita = 0, pedidos = 0, receitaAnterior = 0, emAberto = 0;
+  let receita = 0, pedidos = 0, receitaAnterior = 0;
+  const emAberto = banco.contarPedidosComStatus(STATUS_ABERTOS); // de qualquer data
 
-  for (const p of db.pedidos) {
-    if (STATUS_ABERTOS.includes(p.status)) emAberto++;
+  // Só os pedidos do período e do período anterior (para a comparação) saem do banco.
+  for (const p of banco.listarPedidos({ desde: inicioAnterior.toISOString() })) {
     const criado = new Date(p.criadoEm);
     if (criado >= inicio) status[p.status]++;
     if (p.status === 'cancelado') continue; // cancelados não contam como receita
@@ -439,6 +430,7 @@ const IMAGENS = {
 };
 
 // Serve para qualquer registro com o campo `imagem` (um doce ou a página Sobre); `nome` vira o início do arquivo.
+// Só troca o arquivo e o campo: quem chama grava o registro no banco.
 function salvarImagem(doce, dataUrl, nome = doce.id) {
   const m = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(typeof dataUrl === 'string' ? dataUrl : '');
   if (!m) throw new ErroHttp(400, 'Envie uma foto JPG, PNG ou WebP.');
@@ -462,48 +454,49 @@ function removerImagem(doce) {
 
 const rotas = [
   ['GET', /^\/api\/site$/, (req) => ({
-    loja: db.loja, sobre: db.sobre, admin: ehAdmin(req), cliente: clientePublico(clienteLogado(req)),
+    loja: banco.lerConfig('loja'), sobre: banco.lerConfig('sobre'), admin: ehAdmin(req), cliente: clientePublico(clienteLogado(req)),
   })],
 
-  ['GET', /^\/api\/doces$/, (req) => (ehAdmin(req) ? db.doces : db.doces.filter((d) => d.disponivel))],
+  ['GET', /^\/api\/doces$/, (req) => banco.listarDoces({ soDisponiveis: !ehAdmin(req) })],
 
   ['GET', /^\/api\/doces\/([a-z0-9-]+)$/, (req, [slug]) => {
-    const doce = db.doces.find((d) => d.slug === slug);
+    const doce = banco.docePorSlug(slug);
     if (!doce || (!doce.disponivel && !ehAdmin(req))) throw new ErroHttp(404, 'Doce não encontrado.');
     return doce;
   }],
 
   ['POST', /^\/api\/pedidos$/, async (req) => {
-    limitar(`pedido:${req.socket.remoteAddress}`, 10, 10 * 60 * 1000);
+    limitar(`pedido:${ipDe(req)}`, 10, 10 * 60 * 1000);
     const cliente = exigirCliente(req); // só clientes logados fazem pedido
-    const pedido = criarPedido(await lerJson(req), cliente.id);
+    const pedido = criarPedido(await lerJson(req), cliente);
     return { numero: pedido.numero, total: pedido.total };
   }],
 
   ['POST', /^\/api\/login$/, async (req, _p, res) => {
-    limitar(`login:${req.socket.remoteAddress}`, 8, 15 * 60 * 1000);
+    limitar(`login:${ipDe(req)}`, 8, 15 * 60 * 1000);
     // Login único: a confeiteira entra com o usuário dela; clientes, com o e-mail.
     const { usuario, senha } = await lerJson(req);
     const login = typeof usuario === 'string' ? usuario.trim().toLowerCase() : '';
-    if (login === db.admin.usuario) {
-      if (!senhaConfere(senha, db.admin)) throw new ErroHttp(401, 'E-mail/usuário ou senha incorretos.');
+    const admin = banco.lerConfig('admin');
+    if (login === admin.usuario) {
+      if (!senhaConfere(senha, admin)) throw new ErroHttp(401, 'E-mail/usuário ou senha incorretos.');
       abrirSessao(res, { tipo: 'admin' });
       return { tipo: 'admin' };
     }
-    const cliente = db.clientes.find((c) => c.email === login);
+    const cliente = banco.clientePorEmail(login);
     // Sem conta, confere contra um hash qualquer: a resposta demora o mesmo tanto e não revela se o e-mail existe.
-    const senhaOk = senhaConfere(senha, cliente || db.admin);
+    const senhaOk = senhaConfere(senha, cliente || admin);
     if (!cliente || !senhaOk) throw new ErroHttp(401, 'E-mail/usuário ou senha incorretos.');
     abrirSessao(res, { tipo: 'cliente', clienteId: cliente.id });
     return { tipo: 'cliente' };
   }],
 
   ['POST', /^\/api\/cadastro$/, async (req, _p, res) => {
-    limitar(`cadastro:${req.socket.remoteAddress}`, 5, 60 * 60 * 1000);
+    limitar(`cadastro:${ipDe(req)}`, 5, 60 * 60 * 1000);
     const corpo = await lerJson(req);
     const emailNovo = texto(corpo.email, { max: 120, obrigatorio: true, campo: 'e-mail' }).toLowerCase();
     if (!/^[^\s@<>"',;]+@[^\s@<>"',;]+\.[^\s@<>"',;]+$/.test(emailNovo)) throw new ErroHttp(400, 'Informe um e-mail válido.');
-    if (db.clientes.some((c) => c.email === emailNovo)) throw new ErroHttp(409, 'Já existe uma conta com este e-mail. Tente entrar.');
+    if (banco.clientePorEmail(emailNovo)) throw new ErroHttp(409, 'Já existe uma conta com este e-mail. Tente entrar.');
     const cliente = {
       id: crypto.randomUUID(), email: emailNovo,
       nome: texto(corpo.nome, { max: 80, obrigatorio: true, campo: 'nome' }),
@@ -511,18 +504,17 @@ const rotas = [
       endereco: lerEndereco(corpo.endereco, false),
       ...novaSenha(corpo.senha), criadoEm: new Date().toISOString(),
     };
-    db.clientes.push(cliente);
-    salvar();
+    banco.salvarCliente(cliente);
     abrirSessao(res, { tipo: 'cliente', clienteId: cliente.id });
     return clientePublico(cliente);
   }],
 
   // Responde sempre igual, exista a conta ou não, para não revelar quem é cliente.
   ['POST', /^\/api\/senha\/esqueci$/, async (req) => {
-    limitar(`esqueci:${req.socket.remoteAddress}`, 5, 60 * 60 * 1000);
+    limitar(`esqueci:${ipDe(req)}`, 5, 60 * 60 * 1000);
     const corpo = await lerJson(req);
     const login = typeof corpo.email === 'string' ? corpo.email.trim().toLowerCase() : '';
-    const cliente = db.clientes.find((c) => c.email === login);
+    const cliente = banco.clientePorEmail(login);
     if (cliente) {
       // No máximo 3 e-mails por hora para a mesma conta, sem avisar quem pediu (evita lotar a caixa de alguém).
       try { limitar(`esqueci-conta:${cliente.id}`, 3, 60 * 60 * 1000); enviarLinkRedefinicao(cliente); } catch { /* limite atingido */ }
@@ -531,15 +523,15 @@ const rotas = [
   }],
 
   ['POST', /^\/api\/senha\/redefinir$/, async (req) => {
-    limitar(`redefinir:${req.socket.remoteAddress}`, 10, 15 * 60 * 1000);
+    limitar(`redefinir:${ipDe(req)}`, 10, 15 * 60 * 1000);
     const { token, senha } = await lerJson(req);
     const chave = hashToken(typeof token === 'string' ? token : '');
     const pedido = redefinicoes.get(chave);
-    const cliente = pedido && pedido.validade > Date.now() && db.clientes.find((c) => c.id === pedido.clienteId);
+    const cliente = pedido && pedido.validade > Date.now() && banco.clientePorId(pedido.clienteId);
     if (!cliente) throw new ErroHttp(400, 'Este link expirou ou já foi usado. Peça um novo.');
     Object.assign(cliente, novaSenha(senha)); // se a senha for inválida, lança antes de gastar o link
     redefinicoes.delete(chave);
-    salvar();
+    banco.salvarCliente(cliente);
     // Quem estava logado nessa conta (talvez um invasor) é deslogado.
     for (const [t, sessao] of sessoes) if (sessao.clienteId === cliente.id) sessoes.delete(t);
     return { ok: true };
@@ -554,18 +546,18 @@ const rotas = [
     const telefone = lerTelefone(corpo.telefone);
     const endereco = lerEndereco(corpo.endereco, false);
     if (corpo.novaSenha) {
-      limitar(`senha:${req.socket.remoteAddress}`, 8, 15 * 60 * 1000);
+      limitar(`senha:${ipDe(req)}`, 8, 15 * 60 * 1000);
       if (!senhaConfere(corpo.senhaAtual, cliente)) throw new ErroHttp(400, 'A senha atual não confere.');
       Object.assign(cliente, novaSenha(corpo.novaSenha));
     }
     Object.assign(cliente, { nome, telefone, endereco });
-    salvar();
+    banco.salvarCliente(cliente);
     return clientePublico(cliente);
   }],
 
   ['GET', /^\/api\/conta\/pedidos$/, (req) => {
     const cliente = exigirCliente(req);
-    return db.pedidos.filter((p) => p.clienteId === cliente.id).reverse()
+    return banco.listarPedidos({ clienteId: cliente.id }).reverse()
       .map(({ numero, criadoEm, entrega, itens, total, status }) => ({ numero, criadoEm, entrega, itens, total, status }));
   }],
 
@@ -581,24 +573,22 @@ const rotas = [
     const corpo = await lerJson(req);
     const doce = { id: crypto.randomUUID(), slug: '', nome: '', descricao: '', preco: 0, unidade: 'unidade', emoji: '🧁', imagem: '', disponivel: true };
     aplicarCamposDoce(doce, { nome: '', ...corpo });
-    doce.slug = criarSlug(doce.nome, db.doces.map((d) => d.slug));
-    db.doces.push(doce);
-    salvar();
+    doce.slug = criarSlug(doce.nome, banco.listarDoces().map((d) => d.slug));
+    banco.salvarDoce(doce);
     return doce;
   }, true],
 
   ['PUT', /^\/api\/doces\/([0-9a-f-]{36})$/, async (req, [id]) => {
     const doce = acharDoce(id);
     aplicarCamposDoce(doce, await lerJson(req));
-    salvar();
+    banco.salvarDoce(doce);
     return doce;
   }, true],
 
   ['DELETE', /^\/api\/doces\/([0-9a-f-]{36})$/, (req, [id]) => {
     const doce = acharDoce(id);
     removerImagem(doce);
-    db.doces = db.doces.filter((d) => d !== doce);
-    salvar();
+    banco.apagarDoce(doce.id);
     return { ok: true };
   }, true],
 
@@ -606,15 +596,15 @@ const rotas = [
     const doce = acharDoce(id);
     const { imagem } = await lerJson(req, 3 * 1024 * 1024);
     if (imagem) salvarImagem(doce, imagem); else removerImagem(doce);
-    salvar();
+    banco.salvarDoce(doce);
     return doce;
   }, true],
 
   ['PUT', /^\/api\/sobre$/, async (req) => {
     const corpo = await lerJson(req);
     if (!Array.isArray(corpo.trajetoria) || corpo.trajetoria.length > 30) throw new ErroHttp(400, 'Trajetória inválida.');
-    db.sobre = {
-      imagem: db.sobre.imagem || '', // a foto tem rota própria, logo abaixo
+    const sobre = {
+      imagem: banco.lerConfig('sobre').imagem || '', // a foto tem rota própria, logo abaixo
       titulo: texto(corpo.titulo, { max: 80, obrigatorio: true, campo: 'título' }),
       texto: texto(corpo.texto, { max: 5000, campo: 'história' }),
       trajetoria: corpo.trajetoria.map((t) => ({
@@ -623,20 +613,21 @@ const rotas = [
         texto: texto(t && t.texto, { max: 400, campo: 'texto da etapa' }),
       })),
     };
-    salvar();
-    return db.sobre;
+    banco.gravarConfig('sobre', sobre);
+    return sobre;
   }, true],
 
   ['PUT', /^\/api\/sobre\/imagem$/, async (req) => {
     const { imagem } = await lerJson(req, 3 * 1024 * 1024);
-    if (imagem) salvarImagem(db.sobre, imagem, 'confeiteira'); else removerImagem(db.sobre);
-    salvar();
-    return db.sobre;
+    const sobre = banco.lerConfig('sobre');
+    if (imagem) salvarImagem(sobre, imagem, 'confeiteira'); else removerImagem(sobre);
+    banco.gravarConfig('sobre', sobre);
+    return sobre;
   }, true],
 
   ['PUT', /^\/api\/loja$/, async (req) => {
     const corpo = await lerJson(req);
-    db.loja = {
+    const loja = {
       nome: texto(corpo.nome, { max: 60, obrigatorio: true, campo: 'nome da loja' }),
       slogan: texto(corpo.slogan, { max: 160, campo: 'slogan' }),
       whatsapp: String(corpo.whatsapp || '').replace(/\D/g, '').slice(0, 15),
@@ -644,39 +635,39 @@ const rotas = [
       email: texto(corpo.email, { max: 120, campo: 'e-mail' }),
       cidade: texto(corpo.cidade, { max: 80, campo: 'cidade' }),
     };
-    salvar();
-    return db.loja;
+    banco.gravarConfig('loja', loja);
+    return loja;
   }, true],
 
   ['PUT', /^\/api\/senha$/, async (req) => {
-    limitar(`senha:${req.socket.remoteAddress}`, 8, 15 * 60 * 1000);
+    limitar(`senha:${ipDe(req)}`, 8, 15 * 60 * 1000);
     const { atual, nova } = await lerJson(req);
-    if (!senhaConfere(atual, db.admin)) throw new ErroHttp(400, 'A senha atual não confere.');
-    Object.assign(db.admin, novaSenha(nova), { senhaInicial: false });
-    salvar();
+    const admin = banco.lerConfig('admin');
+    if (!senhaConfere(atual, admin)) throw new ErroHttp(400, 'A senha atual não confere.');
+    banco.gravarConfig('admin', { ...admin, ...novaSenha(nova), senhaInicial: false });
     // Derruba as outras sessões da confeiteira; mantém só a atual.
     const atualToken = lerCookie(req, 'sid');
     for (const [t, sessao] of sessoes) if (sessao.tipo === 'admin' && t !== atualToken) sessoes.delete(t);
     return { ok: true };
   }, true],
 
-  ['GET', /^\/api\/pedidos$/, () => [...db.pedidos].reverse(), true],
+  ['GET', /^\/api\/pedidos$/, () => banco.listarPedidos().reverse(), true],
 
   ['GET', /^\/api\/clientes$/, () => montarClientes(), true],
 
   ['PATCH', /^\/api\/pedidos\/([0-9a-f-]{36})$/, async (req, [id]) => {
-    const pedido = db.pedidos.find((p) => p.id === id);
+    const pedido = banco.pedidoPorId(id);
     if (!pedido) throw new ErroHttp(404, 'Pedido não encontrado.');
     const { status } = await lerJson(req);
     if (!STATUS.includes(status)) throw new ErroHttp(400, 'Status inválido.');
+    banco.mudarStatusPedido(id, status);
     pedido.status = status;
-    salvar();
     return pedido;
   }, true],
 
   ['GET', /^\/api\/dashboard$/, (req, _p, _res, url) => {
     const dias = Number(url.searchParams.get('dias'));
-    return { ...montarDashboard([7, 30, 90].includes(dias) ? dias : 30), senhaInicial: db.admin.senhaInicial };
+    return { ...montarDashboard([7, 30, 90].includes(dias) ? dias : 30), senhaInicial: banco.lerConfig('admin').senhaInicial };
   }, true],
 ];
 

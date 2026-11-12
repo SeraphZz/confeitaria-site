@@ -4,7 +4,7 @@ Site com cardápio de doces, página "Sobre", carrinho com reserva de pedidos e 
 
 ## Como rodar
 
-Requer [Node.js](https://nodejs.org) 18 ou mais novo.
+Requer [Node.js](https://nodejs.org) 24 ou mais novo (o banco usa o SQLite que vem dentro do Node).
 
 ```
 node server.js
@@ -14,9 +14,17 @@ Abra http://localhost:3000. Na primeira execução o terminal mostra o usuário 
 
 Variáveis opcionais: `PORT` (porta), `ADMIN_PASSWORD` (define a senha inicial em vez de sortear), `DATA_DIR` (pasta dos dados), `NODE_ENV=production` (cookie de sessão só por HTTPS).
 
-**Perdeu a senha da confeiteira (acesso de admin)?** Pare o servidor e rode `node scripts/senha-admin.js` (sorteia e mostra uma senha nova) ou `node scripts/senha-admin.js "MinhaSenha123"` (define a que você quiser). Depois suba o servidor de novo.
+**Perdeu a senha da confeiteira (acesso de admin)?** Rode `node scripts/senha-admin.js` (sorteia e mostra uma senha nova) ou `node scripts/senha-admin.js "MinhaSenha123"` (define a que você quiser). Funciona com o servidor ligado.
 
-Para ver o painel com dados de exemplo: pare o servidor, rode `node scripts/demo.js` e suba de novo. `node scripts/demo.js --limpar` remove os pedidos de exemplo.
+Para ver o painel com dados de exemplo: rode `node scripts/demo.js`. `node scripts/demo.js --limpar` remove os pedidos de exemplo.
+
+## Banco de dados e backup
+
+Os dados ficam em um banco SQLite, o arquivo `data/loja.db`. As fotos ficam em `data/uploads/`.
+
+- **Backup:** `node scripts/backup.js` grava uma cópia em `data/backups/` (ou na pasta que você passar: `node scripts/backup.js D:copias`). Pode rodar com o site no ar. Copie também a pasta `data/uploads/` e guarde as cópias fora do servidor.
+- **Restaurar:** pare o servidor, troque `data/loja.db` pela cópia e suba de novo.
+- **Vinha da versão com `db.json`?** Não precisa fazer nada: na primeira execução o servidor copia tudo para o `loja.db` e renomeia o arquivo antigo para `db.json.migrado`, que fica guardado.
 
 ## O que a confeiteira consegue fazer logada
 
@@ -66,18 +74,20 @@ A senha da **confeiteira** não é recuperada por e-mail (a conta dela não tem 
 
 ```
 server.js        API + servidor de arquivos
+banco.js         camada de dados (SQLite): tabelas e todas as consultas
 email.js         envio de e-mail por SMTP (esqueci minha senha)
 seed.js          conteúdo inicial (só usado na 1ª execução)
 pages/           HTML de cada página
 css/site.css     identidade visual (rosa #f8dde2) — o resto de css/ é o Bootstrap
 js/app.js        código compartilhado (API, carrinho, cabeçalho/rodapé)
 js/*.js          um arquivo por página
-data/            criado ao rodar: db.json (dados) e uploads/ (fotos) — faça backup desta pasta
+scripts/         senha-admin.js, backup.js e demo.js
+data/            criado ao rodar: loja.db (banco) e uploads/ (fotos) — faça backup desta pasta
 ```
 
 ## Limites conhecidos (de propósito, para manter simples)
 
-- Os dados ficam em um arquivo JSON: ótimo para uma confeitaria, não para milhares de pedidos por dia. Rode **uma única instância** do servidor.
+- O banco é SQLite, um arquivo no disco do servidor: a hospedagem precisa ter disco persistente. Rode **uma única instância** do servidor.
 - Sessões ficam em memória: reiniciar o servidor desloga a confeiteira.
 - Não há pagamento online: o pedido é uma reserva, confirmada pelo WhatsApp.
-- Ao publicar na internet, coloque atrás de HTTPS (ex.: proxy do provedor de hospedagem) e use `NODE_ENV=production`.
+- Ao publicar na internet, coloque atrás de HTTPS (ex.: proxy do provedor de hospedagem) e use `NODE_ENV=production` e `TRUST_PROXY=1`. O `TRUST_PROXY=1` faz o limite de tentativas de login contar pelo IP de cada visitante, e não pelo IP do proxy; não ligue se o servidor ficar exposto direto, sem proxy.

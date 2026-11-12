@@ -6,9 +6,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "demo": "node scripts/demo.js"
+    "demo": "node scripts/demo.js",
+    "backup": "node scripts/backup.js",
+    "senha": "node scripts/senha-admin.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=24"
   }
 }
