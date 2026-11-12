@@ -73,8 +73,12 @@ A senha da **confeiteira** não é recuperada por e-mail (a conta dela não tem 
 ## Estrutura
 
 ```
-server.js        API + servidor de arquivos
-banco.js         camada de dados (SQLite): tabelas e todas as consultas
+server.js        ponto de entrada: sobe o servidor e encaminha cada pedido para a rota certa
+src/ambiente.js  tudo o que vem de variáveis de ambiente (porta, endereço do site, proxy)
+src/rotas/       rotas da API por assunto: contas.js, catalogo.js, pedidos.js, loja.js
+src/*.js         sessão, senhas, validação, regras de pedidos, imagens e arquivos estáticos
+banco.js         camada de dados (SQLite): todas as consultas
+migracoes/       estrutura das tabelas, em arquivos numerados (ver abaixo)
 email.js         envio de e-mail por SMTP (esqueci minha senha)
 seed.js          conteúdo inicial (só usado na 1ª execução)
 pages/           HTML de cada página
@@ -82,8 +86,26 @@ css/site.css     identidade visual (rosa #f8dde2) — o resto de css/ é o Boots
 js/app.js        código compartilhado (API, carrinho, cabeçalho/rodapé)
 js/*.js          um arquivo por página
 scripts/         senha-admin.js, backup.js e demo.js
+testes/          testes automáticos (npm test)
 data/            criado ao rodar: loja.db (banco) e uploads/ (fotos) — faça backup desta pasta
 ```
+
+## Testes
+
+```
+npm test
+```
+
+Roda os testes de integração (não precisa instalar nada): cada arquivo de `testes/` sobe um servidor de verdade com um banco vazio em uma pasta temporária, então os dados de `data/` nunca são tocados. Rode antes e depois de qualquer alteração no código.
+
+## Atualizações do banco (migrações)
+
+A estrutura das tabelas fica em `migracoes/`, um arquivo numerado por mudança (`001-...`, `002-...`). O banco guarda o número da última aplicada; ao subir, o servidor aplica sozinho as que faltam.
+
+- Antes de alterar um banco que já tem dados, o servidor grava uma cópia em `data/backups/antes-da-migracao-...db`.
+- Cada migração vale por inteiro ou não vale: se falhar, é desfeita, o banco fica como estava e o servidor não sobe (a mensagem diz qual migração falhou).
+- Se o banco for mais novo que o programa (alguém voltou o código para uma versão antiga), o servidor se recusa a subir em vez de arriscar os dados.
+- Para criar uma migração, adicione um arquivo com o próximo número, no formato de `migracoes/001-esquema-inicial.js`. Nunca edite uma migração já publicada.
 
 ## Limites conhecidos (de propósito, para manter simples)
 
