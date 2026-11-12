@@ -1,4 +1,4 @@
-/* Identidade visual da confeitaria. O rosa da marca é #f8dde2. */
+/* Identidade visual da loja. */
 :root {
   color-scheme: light;
   --rosa: #f8dde2;
@@ -97,7 +97,7 @@ a.marca, a.marca:hover, div.marca { color: var(--tinta); }
   background: #fff; color: var(--tinta); font-size: 1.5rem; line-height: 1; cursor: pointer;
 }
 
-/* Foto da confeiteira na página Sobre */
+/* Foto da página Sobre */
 .retrato { width: min(100%, 20rem); height: auto; aspect-ratio: 1; border-radius: 1.25rem; overflow: hidden; background: var(--rosa); }
 .retrato img { width: 100%; height: 100%; object-fit: cover; }
 
@@ -129,7 +129,7 @@ a.marca, a.marca:hover, div.marca { color: var(--tinta); }
 .botao-texto:hover { color: var(--rosa-escuro); }
 .total-linha { display: flex; justify-content: space-between; font-size: 1.25rem; font-weight: 700; }
 
-/* Painel da confeiteira */
+/* Painel da loja */
 .abas { display: flex; gap: .25rem; overflow-x: auto; border-bottom: 1px solid var(--rosa-medio); margin-bottom: 1.5rem; }
 .abas button { border: 0; background: none; padding: .7rem 1rem; font-weight: 600; color: var(--tinta-suave); border-bottom: 3px solid transparent; white-space: nowrap; cursor: pointer; }
 .abas button[aria-selected='true'] { color: var(--rosa-forte); border-bottom-color: var(--rosa-forte); }

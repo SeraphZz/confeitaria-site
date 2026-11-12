@@ -76,7 +76,7 @@ App.pronto.then(async ({ loja, admin, cliente, catalogo }) => {
           ${!cliente ? convite : `
           <form class="painel" id="form-pedido">
             <h2 class="fs-lg mb-2">Reservar pedido</h2>
-            <p class="suave fs-sm mb-4">Você não paga nada agora. A confeiteira confirma o pedido e combina o pagamento pelo WhatsApp.</p>
+            <p class="suave fs-sm mb-4">Você não paga nada agora. A loja confirma o pedido e combina o pagamento pelo WhatsApp.</p>
             <div class="mb-4"><label class="form-label" for="nome">Seu nome</label>
               <input class="form-control" id="nome" maxlength="80" required autocomplete="name" value="${esc(rascunho.nome)}"></div>
             <div class="mb-4"><label class="form-label" for="telefone">WhatsApp com DDD</label>
@@ -85,7 +85,7 @@ App.pronto.then(async ({ loja, admin, cliente, catalogo }) => {
               <input class="form-control" id="data" type="date" required min="${hojeIso}" value="${esc(rascunho.data)}"></div>
             <fieldset class="mb-4">
               <legend class="form-label">Como prefere receber?</legend>
-              <label class="d-flex gap-2 align-items-center mb-1"><input type="radio" name="tipo" value="retirada" ${rascunho.tipo === 'retirada' ? 'checked' : ''}> Retirar com a confeiteira</label>
+              <label class="d-flex gap-2 align-items-center mb-1"><input type="radio" name="tipo" value="retirada" ${rascunho.tipo === 'retirada' ? 'checked' : ''}> Retirar na loja</label>
               <label class="d-flex gap-2 align-items-center"><input type="radio" name="tipo" value="entrega" ${rascunho.tipo === 'entrega' ? 'checked' : ''}> Entrega (taxa a combinar)</label>
             </fieldset>
             <fieldset class="mb-4" id="grupo-endereco" ${rascunho.tipo === 'entrega' ? '' : 'hidden disabled'}>
@@ -162,7 +162,7 @@ App.pronto.then(async ({ loja, admin, cliente, catalogo }) => {
         <div class="painel text-center" style="max-width: 34rem; margin: 0 auto">
           <div style="font-size: 3rem" aria-hidden="true">🎉</div>
           <h2 class="mb-2">Pedido nº ${pedido.numero} recebido!</h2>
-          <p>Total: <strong>${brl(pedido.total)}</strong>. A confeiteira vai entrar em contato pelo WhatsApp para confirmar e combinar o pagamento.</p>
+          <p>Total: <strong>${brl(pedido.total)}</strong>. A loja vai entrar em contato pelo WhatsApp para confirmar e combinar o pagamento.</p>
           <div class="d-flex flex-wrap gap-3 justify-content-center">
             ${loja.whatsapp ? `<a class="btn btn-solid theme-primary" href="${esc(App.linkWhats(loja.whatsapp, mensagem))}" target="_blank" rel="noopener">Avisar pelo WhatsApp</a>` : ''}
             ${cliente ? '<a class="btn btn-outline theme-primary" href="/conta">Ver meus pedidos</a>' : ''}

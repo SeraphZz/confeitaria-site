@@ -49,5 +49,5 @@ http.createServer((req, res) => {
     enviarJson(res, 500, { erro: 'Erro interno. Tente novamente.' });
   });
 }).listen(PORTA, HOST, () => {
-  console.log(`Confeitaria no ar: http://localhost:${PORTA}  (painel: /login)`);
+  console.log(`Loja no ar: http://localhost:${PORTA}  (painel: /login)`);
 });

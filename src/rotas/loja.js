@@ -22,7 +22,7 @@ module.exports = [
   ['PUT', /^\/api\/sobre\/imagem$/, async (req) => {
     const { imagem } = await lerJson(req, LIMITE_JSON_COM_FOTO);
     const sobre = configuracoes.ler('sobre');
-    if (imagem) salvarImagem(sobre, imagem, 'confeiteira'); else removerImagem(sobre);
+    if (imagem) salvarImagem(sobre, imagem, 'sobre'); else removerImagem(sobre);
     return configuracoes.substituir('sobre', sobre);
   }, true],
 

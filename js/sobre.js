@@ -1,5 +1,5 @@
 'use strict';
-// Página "Sobre": história e trajetória. A confeiteira logada pode editar aqui mesmo.
+// Página "Sobre": história e trajetória. A loja logada pode editar aqui mesmo.
 
 App.pronto.then(({ loja, sobre: sobreInicial, admin }) => {
   const { esc, api, aviso } = App;
@@ -12,7 +12,7 @@ App.pronto.then(({ loja, sobre: sobreInicial, admin }) => {
       <div class="row g-7">
         <div class="col-12 md:col-6">
           ${sobre.imagem ? `<button type="button" class="retrato ampliar mb-5" data-ampliar aria-label="Ver a foto inteira">
-            <img src="${esc(sobre.imagem)}" alt="Foto da confeiteira"></button>` : ''}
+            <img src="${esc(sobre.imagem)}" alt="Foto da página Sobre"></button>` : ''}
           <h1 class="mb-4">${esc(sobre.titulo)}</h1>
           <p class="pre-linha fs-md">${esc(sobre.texto)}</p>
           ${loja.whatsapp ? `<a class="btn btn-solid theme-primary mt-3" href="${App.linkWhats(loja.whatsapp)}" target="_blank" rel="noopener">Falar comigo no WhatsApp</a>` : ''}

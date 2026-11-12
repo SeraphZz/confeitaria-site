@@ -124,7 +124,7 @@ const App = (() => {
       `<a class="elo${aqui === href ? ' ativo' : ''}" href="${href}">${rotulo}${extra}</a>`;
     const faixa = admin ? `
       <div class="faixa-admin"><div class="container d-flex justify-content-between gap-4">
-        <span>Você está logada como confeiteira.</span>
+        <span>Você está no painel da loja.</span>
         <span><a href="/admin">Painel</a> · <button type="button" id="sair">Sair</button></span>
       </div></div>` : '';
     document.getElementById('cabecalho').innerHTML = `${faixa}
@@ -161,7 +161,7 @@ const App = (() => {
       </div></footer>`;
   }
 
-  // Cada página espera por isto antes de desenhar: traz dados da loja e se a confeiteira está logada.
+  // Cada página espera por isto antes de desenhar: traz dados da loja e quem está logado.
   const pronto = api('/api/site').then((site) => {
     montarCabecalho(site);
     montarRodape(site);

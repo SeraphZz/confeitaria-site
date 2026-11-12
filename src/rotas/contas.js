@@ -23,7 +23,7 @@ module.exports = [
 
   ['POST', /^\/api\/login$/, async (req, _p, res) => {
     limitar(`login:${ipDe(req)}`, 8, 15 * 60 * 1000);
-    // Login único: a confeiteira entra com o usuário dela; clientes, com o e-mail.
+    // Login único: a loja entra com o usuário dela; clientes, com o e-mail.
     const { usuario, senha } = await lerJson(req);
     const login = typeof usuario === 'string' ? usuario.trim().toLowerCase() : '';
     const admin = configuracoes.ler('admin');

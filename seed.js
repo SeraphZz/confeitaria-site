@@ -1,6 +1,6 @@
 'use strict';
 // Conteúdo inicial do site. Usado apenas na primeira execução, quando o banco ainda está vazio.
-// Depois disso, tudo é editado pelo próprio site (logada como confeiteira).
+// Depois disso, tudo é editado pelo próprio site (com a loja logada).
 
 module.exports = {
   loja: {

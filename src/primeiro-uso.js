@@ -35,7 +35,7 @@ function criarDadosIniciais() {
   });
   if (!SENHA_INICIAL_ADMIN) {
     console.log('\n==============================================');
-    console.log(' Primeiro acesso da confeiteira');
+    console.log(' Primeiro acesso ao painel da loja');
     console.log(' Usuário: confeiteira');
     console.log(` Senha:   ${senha}`);
     console.log(' Troque a senha em Painel > Configurações.');

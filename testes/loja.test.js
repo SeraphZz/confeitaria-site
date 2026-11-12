@@ -114,7 +114,7 @@ test('página Sobre: texto, trajetória e foto', async () => {
   assert.equal((await loja.put('/api/sobre', { titulo: 'X', trajetoria: [{ titulo: '' }] })).status, 400);
 
   const foto = await loja.put('/api/sobre/imagem', { imagem: PNG_1X1 });
-  assert.match(foto.dados.imagem, /^\/uploads\/confeiteira-\d+\.png$/);
+  assert.match(foto.dados.imagem, /^\/uploads\/sobre-\d+\.png$/);
   // Salvar o texto de novo não apaga a foto.
   const denovo = await loja.put('/api/sobre', { titulo: 'Nossa história', texto: '', trajetoria: [] });
   assert.equal(denovo.dados.imagem, foto.dados.imagem);

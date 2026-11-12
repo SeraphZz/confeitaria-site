@@ -1,5 +1,5 @@
 'use strict';
-// Redefine a senha da confeiteira (acesso de admin). Pode rodar com o servidor ligado:
+// Redefine a senha de acesso ao painel da loja. Pode rodar com o servidor ligado:
 //   node scripts/senha-admin.js              -> sorteia uma senha nova e mostra na tela
 //   node scripts/senha-admin.js "MinhaSenha" -> usa a senha informada (mínimo 8 caracteres)
 
@@ -24,7 +24,7 @@ configuracoes.substituir('admin', {
 });
 
 console.log('\n==============================================');
-console.log(' Acesso de admin (confeiteira)');
+console.log(' Acesso ao painel da loja');
 console.log(` Usuário: ${admin.usuario}`);
 console.log(` Senha:   ${senha}`);
 console.log(' Entre em /login com esses dados.');
