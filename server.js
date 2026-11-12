@@ -748,6 +748,7 @@ http.createServer((req, res) => {
     console.error(erro);
     enviarJson(res, 500, { erro: 'Erro interno. Tente novamente.' });
   });
-}).listen(PORT, () => {
+// HOST=127.0.0.1 faz o servidor aceitar só conexões da própria máquina (do proxy HTTPS). Sem HOST, aceita de qualquer lugar.
+}).listen(PORT, process.env.HOST, () => {
   console.log(`Confeitaria no ar: http://localhost:${PORT}  (painel: /login)`);
 });

@@ -1,0 +1,26 @@
+# Serviço do site: sobe junto com a máquina e reinicia sozinho se cair.
+# Copie para /etc/systemd/system/confeitaria.service (ver deploy/README.md).
+
+[Unit]
+Description=Site da confeitaria
+After=network.target
+
+[Service]
+User=confeitaria
+WorkingDirectory=/opt/confeitaria
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+
+# Senhas e configurações ficam fora do repositório, em um arquivo que só o root lê.
+EnvironmentFile=/etc/confeitaria.env
+
+# O processo só consegue gravar na pasta dos dados; o resto do sistema fica somente leitura para ele.
+StateDirectory=confeitaria
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

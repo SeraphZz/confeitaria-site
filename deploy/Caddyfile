@@ -1,0 +1,5 @@
+# Copie para /etc/caddy/Caddyfile trocando SEU-DOMINIO. O Caddy tira e renova o certificado HTTPS sozinho.
+SEU-DOMINIO {
+	encode gzip
+	reverse_proxy 127.0.0.1:3000
+}
