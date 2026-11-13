@@ -1,7 +1,7 @@
 'use strict';
 // Minha conta: dados do cliente e histórico de pedidos.
 
-App.pronto.then(async ({ loja, admin, cliente, catalogo }) => {
+App.pronto.then(async ({ loja, admin, cliente, catalogo, statusPedidos }) => {
   if (admin) return location.replace('/admin');
   if (!cliente) return location.replace('/login');
   const { esc, brl, dataBr, api, aviso, STATUS } = App;
@@ -9,14 +9,22 @@ App.pronto.then(async ({ loja, admin, cliente, catalogo }) => {
 
   // O histórico vem uma página por vez, do pedido mais novo para o mais antigo.
   let historico = await api('/api/conta/pedidos');
+  // Pedido que já terminou (entregue, cancelado...) aparece com o selo apagado.
+  const emAberto = (status) => statusPedidos.find((s) => s.id === status)?.tipo === 'aberto';
+  const quando = (iso) => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   const pedidoHtml = (p) => `
           <article class="pedido">
             <div class="pedido-topo">
-              <div><strong>Pedido nº ${p.numero}</strong> <span class="selo${['entregue', 'cancelado'].includes(p.status) ? ' cinza' : ''}">${STATUS[p.status]}</span>
+              <div><strong>Pedido nº ${p.numero}</strong> <span class="selo${emAberto(p.status) ? '' : ' cinza'}">${esc(STATUS[p.status] || p.status)}</span>
                 <div class="suave fs-sm">feito em ${dataBr(p.criadoEm)} · ${p.entrega.tipo === 'entrega' ? 'entrega' : 'retirada'} em ${dataBr(p.entrega.data)}</div></div>
               <strong>${brl(p.total)}</strong>
             </div>
             <ul>${p.itens.map((i) => `<li>${i.quantidade}× ${esc(i.nome + App.opcoesTexto(i.variacao, i.adicionais))}${i.observacoes ? ` <em>(${esc(i.observacoes)})</em>` : ''}</li>`).join('')}</ul>
+            ${p.historico.length ? `<details class="mt-3"><summary class="suave fs-sm">Andamento do pedido</summary>
+              <ol class="andamento">
+                <li><span class="suave">${quando(p.criadoEm)}</span> Pedido feito</li>
+                ${p.historico.map((h) => `<li><span class="suave">${quando(h.em)}</span> ${esc(h.nome)}</li>`).join('')}
+              </ol></details>` : ''}
           </article>`;
   document.getElementById('conteudo').innerHTML = `
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-5">

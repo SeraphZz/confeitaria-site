@@ -4,6 +4,7 @@
 
 const crypto = require('node:crypto');
 const banco = require('../banco');
+const statusPedido = require('../src/status');
 
 const produtos = banco.listarProdutos();
 if (!produtos.length) {
@@ -16,6 +17,11 @@ banco.transacao(() => {
   if (process.argv.includes('--limpar')) return;
 
   const sortear = (lista) => lista[Math.floor(Math.random() * lista.length)];
+  // Os status são os da loja: pedidos recentes ficam em aberto; os antigos, quase todos concluídos.
+  const abertos = statusPedido.idsDoTipo('aberto');
+  const concluidos = statusPedido.idsDoTipo('concluido');
+  const cancelados = statusPedido.idsDoTipo('cancelado');
+  const antigos = concluidos.length ? [...concluidos, ...concluidos, ...concluidos, ...concluidos, ...cancelados] : abertos;
   const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   for (let n = 1; n <= 60; n++) {
     const pessoa = 1 + Math.floor(Math.random() * 15); // 15 pessoas, cada uma com seu telefone
@@ -31,7 +37,7 @@ banco.transacao(() => {
       cliente: { nome: `Cliente Exemplo ${pessoa}`, telefone: `119999900${String(pessoa).padStart(2, '0')}` },
       entrega: { tipo: sortear(['retirada', 'retirada', 'entrega']), data: iso(entrega), endereco: '' },
       itens, observacoes: '', total: itens.reduce((s, i) => s + i.precoUnit * i.quantidade, 0),
-      status: idade > 5 ? sortear(['entregue', 'entregue', 'entregue', 'entregue', 'cancelado']) : sortear(['novo', 'confirmado', 'producao', 'pronto']),
+      status: idade > 5 ? sortear(antigos) : sortear(abertos),
     });
   }
 });

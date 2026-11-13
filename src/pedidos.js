@@ -8,9 +8,7 @@ const { texto, inteiro, lerTelefone, lerEndereco, formatarEndereco } = require('
 const configuracoes = require('./configuracoes');
 const { modulos, paraVitrine, resolverEscolhas, descreverItem } = require('./catalogo');
 const { diaNoFuso, somarDias, instanteAntesDoDia } = require('./datas');
-
-const STATUS = ['novo', 'confirmado', 'producao', 'pronto', 'entregue', 'cancelado'];
-const STATUS_ABERTOS = ['novo', 'confirmado', 'producao', 'pronto'];
+const statusPedido = require('./status');
 
 function criarPedido(corpo, conta) {
   const cliente = corpo.cliente || {};
@@ -53,7 +51,8 @@ function criarPedido(corpo, conta) {
     id: crypto.randomUUID(), criadoEm: new Date().toISOString(),
     clienteId: conta.id, cliente: { nome, telefone }, entrega: { tipo, data, endereco: endereco ? formatarEndereco(endereco) : '' },
     itens, observacoes: texto(corpo.observacoes, { max: 500, campo: 'observações' }),
-    total: itens.reduce((s, i) => s + i.precoUnit * i.quantidade, 0), status: 'novo',
+    total: itens.reduce((s, i) => s + i.precoUnit * i.quantidade, 0), status: statusPedido.inicial().id,
+    historico: [],
   };
   banco.transacao(() => {
     // Com o estoque ligado, cada item sai do estoque na hora do pedido. Se faltar para algum, o erro desfaz a
@@ -76,12 +75,27 @@ function criarPedido(corpo, conta) {
   return pedido;
 }
 
-// Muda o status do pedido e acerta o estoque: cancelar devolve o que o pedido tinha tirado; reabrir um pedido
-// cancelado tira de novo (e é recusado se não houver mais o bastante). Vale mesmo com o recurso de estoque desligado
-// agora: o que conta é se o item mexeu no estoque quando o pedido foi feito.
-function mudarStatus(pedido, status) {
-  const cancelando = status === 'cancelado' && pedido.status !== 'cancelado';
-  const reabrindo = status !== 'cancelado' && pedido.status === 'cancelado';
+// Muda o status do pedido, se a loja permite ir do status atual para o novo (Painel > Configurações), e guarda a
+// mudança no histórico do pedido: de onde, para onde, quem e quando. `quem` é a pessoa da equipe; `observacao` é
+// opcional (ex.: o motivo de um cancelamento).
+//
+// Também acerta o estoque: cancelar devolve o que o pedido tinha tirado; reabrir um pedido cancelado tira de novo
+// (e é recusado se não houver mais o bastante). Vale mesmo com o recurso de estoque desligado agora: o que conta é
+// se o item mexeu no estoque quando o pedido foi feito.
+function mudarStatus(pedido, status, { quem, observacao = '' } = {}) {
+  const lista = statusPedido.listar();
+  const para = lista.find((s) => s.id === status);
+  if (!para) throw new ErroHttp(400, 'Status inválido.');
+  const de = lista.find((s) => s.id === pedido.status);
+  if (para.id === pedido.status) throw new ErroHttp(409, `O pedido já está como "${para.nome}".`);
+  if (de && !de.destinos.includes(para.id)) {
+    const destinos = de.destinos.map((id) => `"${lista.find((s) => s.id === id).nome}"`).join(', ');
+    throw new ErroHttp(409, `Um pedido "${de.nome}" não pode ir para "${para.nome}". ${destinos ? `Daqui ele pode ir para: ${destinos}.` : 'Este status não leva a nenhum outro.'}`);
+  }
+  const nota = texto(observacao, { max: 300, campo: 'observação' });
+
+  const cancelando = para.tipo === 'cancelado' && de?.tipo !== 'cancelado';
+  const reabrindo = para.tipo !== 'cancelado' && de?.tipo === 'cancelado';
   banco.transacao(() => {
     if (cancelando) {
       for (const item of pedido.itens) if (item.estoqueSituacao === 1) banco.devolverEstoque(item);
@@ -97,12 +111,17 @@ function mudarStatus(pedido, status) {
       banco.trocarSituacaoEstoque(pedido.numero, 2, 1);
     }
     banco.mudarStatusPedido(pedido.id, status);
+    banco.inserirHistorico({
+      pedidoNumero: pedido.numero, de: pedido.status, deNome: de ? de.nome : pedido.status, para: para.id, paraNome: para.nome,
+      usuarioId: quem?.id, usuarioNome: quem?.nome, observacao: nota,
+    });
   });
   return banco.pedidoPorId(pedido.id);
 }
 
 // Agrupa os pedidos por pessoa: pela conta, quando o cliente estava logado; senão pelo telefone.
 function montarClientes() {
+  const cancelados = new Set(statusPedido.idsDoTipo('cancelado'));
   const pessoas = new Map();
   for (const c of banco.listarClientes()) {
     pessoas.set(c.id, { nome: c.nome, telefone: c.telefone, email: c.email, cadastrado: true, pedidos: [] });
@@ -118,7 +137,7 @@ function montarClientes() {
     });
   }
   return [...pessoas.values()].map((pessoa) => {
-    const validos = pessoa.pedidos.filter((p) => p.status !== 'cancelado');
+    const validos = pessoa.pedidos.filter((p) => !cancelados.has(p.status));
     pessoa.pedidos.reverse(); // mais recentes primeiro
     return {
       ...pessoa, quantidade: validos.length, total: validos.reduce((s, p) => s + p.total, 0),
@@ -138,15 +157,22 @@ function montarDashboard(dias) {
   for (let d = inicio; d <= hoje; d = somarDias(d, 1)) serie.set(d, { data: d, receita: 0, pedidos: 0 });
 
   const porProduto = new Map();
-  const status = Object.fromEntries(STATUS.map((s) => [s, 0]));
-  let receita = 0, pedidos = 0, receitaAnterior = 0;
-  const emAberto = banco.contarPedidosComStatus(STATUS_ABERTOS); // de qualquer data
+  const lista = statusPedido.listar();
+  const tipoDe = new Map(lista.map((s) => [s.id, s.tipo]));
+  const inicial = lista.find((s) => s.inicial);
+  const status = Object.fromEntries(lista.map((s) => [s.id, 0])); // pedidos do período em cada status
+  let receita = 0, pedidos = 0, receitaAnterior = 0, cancelados = 0;
+  const emAberto = banco.contarPedidosComStatus(statusPedido.idsDoTipo('aberto')); // de qualquer data
 
   // Só os pedidos do período e do período anterior (para a comparação) saem do banco.
   for (const p of banco.listarPedidos({ desde: instanteAntesDoDia(inicioAnterior) })) {
     const criado = diaNoFuso(new Date(p.criadoEm), fuso);
-    if (criado >= inicio) status[p.status]++;
-    if (p.status === 'cancelado') continue; // cancelados não contam como receita
+    const cancelado = tipoDe.get(p.status) === 'cancelado';
+    if (criado >= inicio) {
+      status[p.status] = (status[p.status] || 0) + 1;
+      if (cancelado) cancelados++;
+    }
+    if (cancelado) continue; // cancelados não contam como receita
     if (criado >= inicio) {
       const dia = serie.get(criado);
       if (!dia) continue;
@@ -167,11 +193,15 @@ function montarDashboard(dias) {
 
   return {
     dias,
-    kpis: { receita, pedidos, ticketMedio: pedidos ? Math.round(receita / pedidos) : 0, receitaAnterior, emAberto },
+    kpis: {
+      receita, pedidos, ticketMedio: pedidos ? Math.round(receita / pedidos) : 0, receitaAnterior, emAberto,
+      // Do período: quantos foram cancelados e quantos ainda estão no status inicial (esperando a loja).
+      cancelados, novos: status[inicial.id] || 0, nomeInicial: inicial.nome,
+    },
     serie: [...serie.values()],
     topProdutos: [...porProduto.values()].sort((a, b) => b.receita - a.receita).slice(0, 6),
     status,
   };
 }
 
-module.exports = { STATUS, STATUS_ABERTOS, criarPedido, mudarStatus, montarClientes, montarDashboard };
+module.exports = { criarPedido, mudarStatus, montarClientes, montarDashboard };

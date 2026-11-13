@@ -235,6 +235,7 @@ const App = (() => {
     // site.pode('produtos.editar'): se quem está logado é da equipe e tem a permissão. Serve para as telas mostrarem
     // só o que a pessoa consegue usar; quem decide de verdade é o servidor, em cada rota.
     site.pode = (permissao) => Boolean(site.usuario?.permissoes.includes(permissao));
+    for (const s of site.statusPedidos) STATUS[s.id] = s.nome;
     montarCabecalho(site);
     montarRodape(site);
     return site;
@@ -336,10 +337,9 @@ const App = (() => {
   // "Doces" -> "doces", para usar o nome que a loja escolheu no meio de uma frase ("Ver doces").
   const minusculas = (textoQualquer) => String(textoQualquer ?? '').toLocaleLowerCase('pt-BR');
 
-  const STATUS = {
-    novo: 'Novo', confirmado: 'Confirmado', producao: 'Em produção',
-    pronto: 'Pronto', entregue: 'Entregue', cancelado: 'Cancelado',
-  };
+  // Nome de cada status de pedido, pelo id. Os status são da loja (Painel > Configurações) e chegam com /api/site:
+  // este objeto é preenchido antes de `pronto` avisar as páginas. A lista completa fica em `site.statusPedidos`.
+  const STATUS = {};
 
   return {
     esc, brl, lerPreco, dataBr, api, aviso, carrinho, escolhasDoItem, opcoesTexto, precoVitrine, fotoHtml, reduzirImagem, sair, STATUS, pronto, minusculas, resumirHorarios,

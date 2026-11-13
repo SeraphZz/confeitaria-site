@@ -201,6 +201,41 @@ test('migração 005: banco novo recebe os perfis de partida e nenhuma pessoa', 
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM usuarios').get().n, 0);
 });
 
+test('migração 007: os pedidos continuam nos mesmos status, que agora são da loja; o histórico começa vazio', () => {
+  const migracoes = carregarMigracoes();
+  aplicar(db, { migracoes: migracoes.slice(0, 6), log: silencio });
+  db.exec(`
+    INSERT INTO pedidos (id, criado_em, cliente_nome, cliente_telefone, entrega_tipo, entrega_data, total, status) VALUES
+      ('x1', '2026-01-02T10:00:00.000Z', 'Ana', '11999999999', 'retirada', '2026-01-05', 10000, 'producao'),
+      ('x2', '2026-01-03T10:00:00.000Z', 'Bia', '11988888888', 'entrega', '2026-01-06', 5000, 'cancelado'),
+      ('x3', '2026-01-04T10:00:00.000Z', 'Caio', '11977777777', 'retirada', '2026-01-07', 2000, 'aguardando');
+  `);
+
+  aplicar(db, { migracoes: migracoes.slice(0, 7), log: silencio });
+  assert.deepEqual(db.prepare('SELECT id, status, total FROM pedidos ORDER BY numero').all().map((l) => ({ ...l })), [
+    { id: 'x1', status: 'producao', total: 10000 }, { id: 'x2', status: 'cancelado', total: 5000 }, { id: 'x3', status: 'aguardando', total: 2000 },
+  ]);
+  assert.deepEqual(db.prepare('SELECT id, nome, tipo, inicial FROM status_pedido ORDER BY ordem').all().map((l) => Object.values(l)), [
+    ['novo', 'Novo', 'aberto', 1], ['confirmado', 'Confirmado', 'aberto', 0], ['producao', 'Em produção', 'aberto', 0], ['pronto', 'Pronto', 'aberto', 0],
+    ['entregue', 'Entregue', 'concluido', 0], ['cancelado', 'Cancelado', 'cancelado', 0],
+    ['aguardando', 'aguardando', 'aberto', 0], // status que alguém pôs à mão no banco: entra na lista, em aberto
+  ]);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pedido_historico').get().n, 0, 'nada é inventado sobre o passado');
+  // De um status em aberto dá para ir a todos os outros cinco; os finais só voltam um passo.
+  const destinos = (de) => db.prepare('SELECT para FROM status_transicoes WHERE de = ? ORDER BY para').all(de).map((l) => l.para);
+  assert.deepEqual(destinos('producao'), ['cancelado', 'confirmado', 'entregue', 'novo', 'pronto']);
+  assert.deepEqual([destinos('entregue'), destinos('cancelado')], [['pronto'], ['novo']]);
+
+  // O banco recusa o que não faz sentido.
+  assert.throws(() => db.exec("INSERT INTO status_pedido (id, nome, tipo, inicial, ordem) VALUES ('outro', 'Outro', 'aberto', 1, 9)"), /UNIQUE/, 'só um status inicial');
+  assert.throws(() => db.exec("INSERT INTO status_pedido (id, nome, tipo, ordem) VALUES ('outro', 'Outro', 'talvez', 9)"), /CHECK/);
+  assert.throws(() => db.exec("INSERT INTO status_transicoes (de, para) VALUES ('novo', 'novo')"), /CHECK/);
+  assert.throws(() => db.exec("INSERT INTO status_transicoes (de, para) VALUES ('novo', 'nao-existe')"), /FOREIGN KEY/);
+  assert.throws(() => db.exec("DELETE FROM status_pedido WHERE id = 'producao'"), /Há pedidos com este status/);
+  db.exec("DELETE FROM status_pedido WHERE id = 'pronto'"); // sem pedidos: sai, e leva as transições dele
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM status_transicoes WHERE de = 'pronto' OR para = 'pronto'").get().n, 0);
+});
+
 test('arquivos de migração fora de sequência são recusados', () => {
   const dir = path.join(pasta, 'm');
   fs.mkdirSync(dir);

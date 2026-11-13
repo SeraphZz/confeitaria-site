@@ -3,7 +3,7 @@
 
 // Cada aba só aparece para quem tem a permissão dela (src/permissoes.js); o servidor confere de novo em cada rota.
 
-App.pronto.then(async ({ loja, admin, usuario, pode, catalogo, atendimento, modulos }) => {
+App.pronto.then(async ({ loja, admin, usuario, pode, catalogo, atendimento, modulos, statusPedidos }) => {
   if (!admin) return location.replace('/login');
   const { esc, brl, dataBr, api, aviso, minusculas } = App;
   const el = (id) => document.getElementById(id);
@@ -97,9 +97,9 @@ App.pronto.then(async ({ loja, admin, usuario, pode, catalogo, atendimento, modu
       `<div class="kpi"><div class="rotulo">${rotulo}</div><div class="valor">${valor}</div><div class="nota">${nota}</div></div>`;
     el('kpis').innerHTML =
       kpi(`Receita (${dias} dias)`, brl(receita), comparacao) +
-      kpi('Pedidos', pedidos, r.status.cancelado ? `${r.status.cancelado} cancelado(s) fora da conta` : '') +
+      kpi('Pedidos', pedidos, r.kpis.cancelados ? `${r.kpis.cancelados} cancelado(s) fora da conta` : '') +
       kpi('Ticket médio', brl(ticketMedio)) +
-      kpi('Em aberto agora', emAberto, r.status.novo ? `<a href="#pedidos">${r.status.novo} novo(s) para confirmar</a>` : 'aguardando produção ou entrega');
+      kpi('Em aberto agora', emAberto, r.kpis.novos ? `<a href="#pedidos">${r.kpis.novos} em "${esc(r.kpis.nomeInicial)}", esperando você</a>` : 'nenhum pedido novo esperando');
 
     desenharBarras('grafico-receita', {
       rotulos: r.serie.map((d) => dataBr(d.data).slice(0, 5)),
@@ -133,27 +133,51 @@ App.pronto.then(async ({ loja, admin, usuario, pode, catalogo, atendimento, modu
   });
 
   // ------------------------------------------------------------ pedidos
+  // Os status são os da loja (Configurações > Status dos pedidos). Os `destinos` de cada um dizem para onde um pedido
+  // naquele status pode ir: o seletor de cada pedido só oferece esses (e o servidor recusa o resto).
+  const statusPorId = new Map(statusPedidos.map((s) => [s.id, s]));
+  const idInicial = statusPedidos.find((s) => s.inicial)?.id;
+  const quando = (iso) => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   let pedidos = [];
   el('filtro-status').innerHTML =
     '<option value="abertos">Em aberto</option><option value="todos">Todos</option>' +
-    Object.entries(STATUS).map(([v, r]) => `<option value="${v}">${r}</option>`).join('');
+    statusPedidos.map((s) => `<option value="${esc(s.id)}">${esc(s.nome)}</option>`).join('');
+
+  function seletorDeStatus(p) {
+    const destinos = (statusPorId.get(p.status)?.destinos || []).map((id) => statusPorId.get(id)).filter(Boolean);
+    const travado = !pode('pedidos.alterar') ? 'disabled title="Você não tem permissão para alterar pedidos"'
+      : destinos.length ? '' : 'disabled title="Este status não leva a nenhum outro"';
+    return `<select class="form-control" data-pedido="${p.id}" aria-label="Status do pedido ${p.numero}" style="width: auto" ${travado}>
+              <option value="" selected>${esc(STATUS[p.status] || p.status)}</option>
+              ${destinos.map((s) => `<option value="${esc(s.id)}">→ ${esc(s.nome)}</option>`).join('')}
+            </select>`;
+  }
+
+  // Por onde o pedido passou: quem mudou, quando e a observação (ex.: o motivo de um cancelamento).
+  function historicoHtml(p) {
+    if (!p.historico.length) return '';
+    return `<details class="mt-3"><summary class="suave fs-sm">Histórico (${p.historico.length} ${p.historico.length === 1 ? 'mudança' : 'mudanças'})</summary>
+          <ol class="andamento">
+            <li><span class="suave">${quando(p.criadoEm)}</span> Pedido feito pelo cliente</li>
+            ${p.historico.map((h) => `<li><span class="suave">${quando(h.em)}</span> ${esc(h.deNome)} → <strong>${esc(h.paraNome)}</strong>${h.por ? ` · ${esc(h.por)}` : ''}${h.observacao ? `<br><em>${esc(h.observacao)}</em>` : ''}</li>`).join('')}
+          </ol></details>`;
+  }
 
   function desenharPedidos() {
+    // O servidor já filtrou; aqui só sai da lista o pedido que mudou de status na tela e deixou de casar com o filtro.
     const filtro = el('filtro-status').value;
     const visiveis = pedidos.filter((p) =>
-      filtro === 'todos' || p.status === filtro || (filtro === 'abertos' && !['entregue', 'cancelado'].includes(p.status)));
+      filtro === 'todos' || p.status === filtro || (filtro === 'abertos' && statusPorId.get(p.status)?.tipo === 'aberto'));
     el('lista-pedidos').innerHTML = visiveis.length ? visiveis.map((p) => `
-      <article class="pedido${p.status === 'novo' ? ' status-novo' : ''}">
+      <article class="pedido${p.status === idInicial ? ' status-novo' : ''}">
         <div class="pedido-topo">
           <div>
             <strong>Pedido nº ${p.numero}</strong> · ${esc(p.cliente.nome)}
-            <div class="suave fs-sm">feito em ${new Date(p.criadoEm).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</div>
+            <div class="suave fs-sm">feito em ${quando(p.criadoEm)}</div>
           </div>
           <div class="d-flex align-items-center gap-3">
             <strong>${brl(p.total)}</strong>
-            <select class="form-control" data-pedido="${p.id}" aria-label="Status do pedido ${p.numero}" style="width: auto" ${pode('pedidos.alterar') ? '' : 'disabled title="Você não tem permissão para alterar pedidos"'}>
-              ${Object.entries(STATUS).map(([v, r]) => `<option value="${v}"${v === p.status ? ' selected' : ''}>${r}</option>`).join('')}
-            </select>
+            ${seletorDeStatus(p)}
           </div>
         </div>
         <ul>
@@ -164,16 +188,27 @@ App.pronto.then(async ({ loja, admin, usuario, pode, catalogo, atendimento, modu
           · <a href="${App.linkWhats(p.cliente.telefone)}" target="_blank" rel="noopener">WhatsApp ${App.formatarTelefone(p.cliente.telefone)}</a>
           ${p.observacoes ? `<div class="mt-1"><strong>Obs.:</strong> ${esc(p.observacoes)}</div>` : ''}
         </div>
-      </article>`).join('') : '<p class="suave">Nenhum pedido aqui por enquanto.</p>';
+        ${historicoHtml(p)}
+      </article>`).join('') : `<p class="suave">${filtrando() ? 'Nenhum pedido com esses filtros.' : 'Nenhum pedido aqui por enquanto.'}</p>`;
     el('mais-pedidos').hidden = paginaPedidos.pagina >= paginaPedidos.paginas;
+    el('total-pedidos').textContent = paginaPedidos.total === 1 ? '1 pedido' : `${paginaPedidos.total ?? 0} pedidos`;
+    el('limpar-filtros').hidden = !filtrando();
   }
 
-  // Os pedidos vêm do servidor uma página por vez, já filtrados pelo status escolhido; "Carregar mais" busca a
-  // página seguinte e junta à lista. (O filtro em desenharPedidos continua valendo para o que muda de status na tela.)
-  let paginaPedidos = { pagina: 0, paginas: 1 };
+  // Busca e filtros são feitos no servidor, em todos os pedidos (não só nos que já estão na tela).
+  const CAMPOS_FILTRO = { busca: 'busca-pedido', status: 'filtro-status', entrega: 'filtro-entrega', de: 'filtro-de', ate: 'filtro-ate' };
+  const FILTRO_PADRAO = { busca: '', status: 'abertos', entrega: '', de: '', ate: '' };
+  const filtros = () => Object.fromEntries(Object.entries(CAMPOS_FILTRO).map(([nome, id]) => [nome, el(id).value.trim()]));
+  const filtrando = () => Object.entries(filtros()).some(([nome, valor]) => valor !== FILTRO_PADRAO[nome]);
+
+  // Os pedidos vêm uma página por vez; "Carregar mais" busca a página seguinte, com os mesmos filtros, e junta à lista.
+  let paginaPedidos = { pagina: 0, paginas: 1, total: 0 };
+  let consultaPedidos = 0;
   async function carregarPedidos({ mais = false } = {}) {
+    const consulta = ++consultaPedidos;
     const numero = mais ? paginaPedidos.pagina + 1 : 1;
-    const resposta = await api(`/api/pedidos?status=${encodeURIComponent(el('filtro-status').value)}&pagina=${numero}`);
+    const resposta = await api(`/api/pedidos?${new URLSearchParams({ ...filtros(), pagina: numero })}`);
+    if (consulta !== consultaPedidos) return; // a pessoa mudou os filtros nesse meio-tempo: vale a resposta mais recente
     // Se chegou pedido novo enquanto a tela estava aberta, a página seguinte repete algum já mostrado: esse é descartado.
     const jaMostrados = new Set(mais ? pedidos.map((p) => p.id) : []);
     pedidos = mais ? [...pedidos, ...resposta.itens.filter((p) => !jaMostrados.has(p.id))] : resposta.itens;
@@ -181,13 +216,31 @@ App.pronto.then(async ({ loja, admin, usuario, pode, catalogo, atendimento, modu
     desenharPedidos();
   }
 
-  el('filtro-status').addEventListener('change', () => carregarPedidos().catch(tratarErro));
+  let esperaBuscaPedido;
+  el('busca-pedido').addEventListener('input', () => {
+    clearTimeout(esperaBuscaPedido); // espera a pessoa parar de digitar
+    esperaBuscaPedido = setTimeout(() => carregarPedidos().catch(tratarErro), 300);
+  });
+  for (const id of ['filtro-status', 'filtro-entrega', 'filtro-de', 'filtro-ate']) {
+    el(id).addEventListener('change', () => carregarPedidos().catch(tratarErro));
+  }
+  el('filtros-pedidos').addEventListener('submit', (evento) => { evento.preventDefault(); carregarPedidos().catch(tratarErro); });
+  el('limpar-filtros').addEventListener('click', () => {
+    for (const [nome, id] of Object.entries(CAMPOS_FILTRO)) el(id).value = FILTRO_PADRAO[nome];
+    carregarPedidos().catch(tratarErro);
+  });
   el('mais-pedidos').addEventListener('click', () => carregarPedidos({ mais: true }).catch(tratarErro));
   el('lista-pedidos').addEventListener('change', async (evento) => {
     const id = evento.target.dataset.pedido;
-    if (!id) return;
+    if (!id || !evento.target.value) return;
+    const corpo = { status: evento.target.value };
+    if (statusPorId.get(corpo.status)?.tipo === 'cancelado') {
+      const motivo = prompt('Motivo do cancelamento (opcional). Fica no histórico do pedido; o cliente não vê.');
+      if (motivo === null) return desenharPedidos(); // desistiu: o seletor volta ao status em que o pedido está
+      corpo.observacao = motivo.slice(0, 300);
+    }
     try {
-      const atualizado = await api(`/api/pedidos/${id}`, { metodo: 'PATCH', corpo: { status: evento.target.value } });
+      const atualizado = await api(`/api/pedidos/${id}`, { metodo: 'PATCH', corpo });
       pedidos = pedidos.map((p) => (p.id === id ? atualizado : p));
       desenharPedidos();
       aviso(`Pedido nº ${atualizado.numero}: ${STATUS[atualizado.status]}.`);
@@ -217,7 +270,7 @@ App.pronto.then(async ({ loja, admin, usuario, pode, catalogo, atendimento, modu
         </summary>
         ${p.pedidos.length ? `
         <table class="tabela-simples mt-3"><thead><tr><th>Pedido</th><th>Itens</th><th>Status</th><th>Total</th></tr></thead><tbody>
-          ${p.pedidos.map((x) => `<tr><td>nº ${x.numero}<br><span class="suave">${dataBr(x.criadoEm)}</span></td><td>${esc(x.itens)}</td><td>${STATUS[x.status]}</td><td>${brl(x.total)}</td></tr>`).join('')}
+          ${p.pedidos.map((x) => `<tr><td>nº ${x.numero}<br><span class="suave">${dataBr(x.criadoEm)}</span></td><td>${esc(x.itens)}</td><td>${esc(STATUS[x.status] || x.status)}</td><td>${brl(x.total)}</td></tr>`).join('')}
         </tbody></table>` : '<p class="suave fs-sm mt-3 mb-0">Ainda não fez pedidos.</p>'}
       </details>`).join('') : '<p class="suave">Ninguém encontrado.</p>';
   }
@@ -502,7 +555,7 @@ App.pronto.then(async ({ loja, admin, usuario, pode, catalogo, atendimento, modu
   let atividades = [];
   let paginaAtividade = { pagina: 0, paginas: 1 };
   const ROTULOS_DETALHE = { de: 'de', para: 'para', perfil: 'perfil', nome: 'nome', ativo: 'ativo', conceder: 'liberou', negar: 'bloqueou',
-    senhaTrocada: 'senha trocada', permissoes: 'permissões', campos: 'campos', preco: 'preço', disponivel: 'disponível', estoque: 'estoque', motivo: 'motivo' };
+    senhaTrocada: 'senha trocada', permissoes: 'permissões', campos: 'campos', preco: 'preço', disponivel: 'disponível', estoque: 'estoque', motivo: 'motivo', nomes: 'status' };
 
   // { de: 'novo', para: 'entregue' } -> "de: Novo · para: Entregue". Valores vazios não aparecem.
   function detalhesTexto(detalhes) {
@@ -546,13 +599,13 @@ App.pronto.then(async ({ loja, admin, usuario, pode, catalogo, atendimento, modu
   async function carregarConfig() {
     // Sem a permissão de configurações, a aba mostra só a troca da própria senha.
     const podeConfigurar = pode('configuracoes.editar');
-    for (const id of ['form-loja', 'form-atendimento', 'form-catalogo', 'form-modulos']) el(id).hidden = !podeConfigurar;
+    for (const id of ['form-loja', 'form-atendimento', 'form-catalogo', 'form-modulos', 'form-status']) el(id).hidden = !podeConfigurar;
     if (!podeConfigurar) return;
     for (const campo of CAMPOS_LOJA) el(`loja-${campo}`).value = dadosLoja[campo] || '';
     el('loja-whatsapp').value = App.formatarTelefone(dadosLoja.whatsapp);
     for (const campo of CAMPOS_CATALOGO) el(`catalogo-${campo}`).value = catalogo[campo] || '';
     for (const nome of MODULOS) el(`modulos-${nome}`).checked = modulos[nome];
-    await carregarAtendimento();
+    await Promise.all([carregarAtendimento(), carregarStatus()]);
   }
 
   // ---- recursos opcionais do catálogo (variações, adicionais e estoque)
@@ -562,6 +615,99 @@ App.pronto.then(async ({ loja, admin, usuario, pode, catalogo, atendimento, modu
     try {
       await api('/api/configuracoes/modulos', { metodo: 'PUT', corpo: Object.fromEntries(MODULOS.map((nome) => [nome, el(`modulos-${nome}`).checked])) });
       location.reload(); // os recursos mudam várias telas do painel: recarregar atualiza tudo de uma vez
+    } catch (erro) { tratarErro(erro); }
+  });
+
+  // ---- status dos pedidos: nomes, ordem, tipo, qual é o inicial e para onde cada um pode ir
+  // A lista é editada aqui na tela e enviada inteira ao salvar. Status novo ganha um id provisório ("novo-1"), que só
+  // serve para as transições apontarem para ele dentro do envio; o servidor troca por um id definitivo.
+  const TIPOS_STATUS = [['aberto', 'Em aberto'], ['concluido', 'Concluído'], ['cancelado', 'Cancelado']];
+  let listaStatus = [];
+  let statusProvisorio = 0;
+
+  function desenharStatus() {
+    el('lista-status').innerHTML = listaStatus.map((s, i) => `
+      <div class="cartao-status" data-status="${i}">
+        <div class="linha-opcao mb-0">
+          <input class="form-control" data-campo="nome" maxlength="30" required value="${esc(s.nome)}" aria-label="Nome do status" placeholder="Ex.: Saiu para entrega">
+          <select class="form-control" data-campo="tipo" aria-label="Tipo do status ${esc(s.nome)}" style="width: auto" ${s.pedidos ? 'disabled title="Há pedidos neste status: o tipo não pode mudar"' : ''}>
+            ${TIPOS_STATUS.map(([valor, rotulo]) => `<option value="${valor}"${valor === s.tipo ? ' selected' : ''}>${rotulo}</option>`).join('')}
+          </select>
+          <button type="button" class="btn btn-outline theme-primary btn-sm" data-mover-status="-1" aria-label="Subir ${esc(s.nome)}" ${i === 0 ? 'disabled' : ''}>↑</button>
+          <button type="button" class="btn btn-outline theme-primary btn-sm" data-mover-status="1" aria-label="Descer ${esc(s.nome)}" ${i === listaStatus.length - 1 ? 'disabled' : ''}>↓</button>
+          <button type="button" class="botao-texto" data-excluir-status ${s.pedidos ? `disabled title="Há ${s.pedidos} pedido(s) neste status"` : ''}>Excluir</button>
+        </div>
+        <label class="d-flex gap-2 align-items-center fs-sm mt-2"><input type="radio" name="status-inicial" data-campo="inicial" ${s.inicial ? 'checked' : ''} ${s.tipo === 'aberto' ? '' : 'disabled'}> Todo pedido novo começa aqui</label>
+        <div class="destinos"><span class="suave">Daqui o pedido pode ir para:</span>
+          ${listaStatus.map((d) => (d.id === s.id ? '' : `<label class="d-flex gap-1 align-items-center"><input type="checkbox" data-destino="${esc(d.id)}" ${s.destinos.includes(d.id) ? 'checked' : ''}> <span data-nome-de="${esc(d.id)}">${esc(d.nome || '(sem nome)')}</span></label>`)).join('')}
+        </div>
+        ${s.pedidos ? `<div class="suave fs-sm mt-2">${s.pedidos} pedido(s) neste status.</div>` : ''}
+      </div>`).join('');
+  }
+
+  async function carregarStatus() {
+    listaStatus = await api('/api/status-pedidos');
+    desenharStatus();
+  }
+
+  // Digitar o nome não redesenha a lista (o cursor sairia do campo); o resto redesenha, para os outros cartões
+  // acompanharem (nomes nos destinos, botão de inicial, setas).
+  el('lista-status').addEventListener('input', (evento) => {
+    const cartao = evento.target.closest('[data-status]');
+    if (!cartao || evento.target.dataset.campo !== 'nome') return;
+    const s = listaStatus[Number(cartao.dataset.status)];
+    s.nome = evento.target.value;
+    for (const rotulo of el('lista-status').querySelectorAll('[data-nome-de]')) {
+      if (rotulo.dataset.nomeDe === s.id) rotulo.textContent = s.nome || '(sem nome)';
+    }
+  });
+  el('lista-status').addEventListener('change', (evento) => {
+    const cartao = evento.target.closest('[data-status]');
+    if (!cartao) return;
+    const s = listaStatus[Number(cartao.dataset.status)];
+    const { campo, destino } = evento.target.dataset;
+    if (campo === 'nome') return; // já tratado enquanto a pessoa digitava
+    if (campo === 'tipo') {
+      s.tipo = evento.target.value;
+      // O inicial precisa ser "em aberto": se deixou de ser, o primeiro em aberto da lista assume.
+      if (s.inicial && s.tipo !== 'aberto') {
+        s.inicial = false;
+        const outro = listaStatus.find((x) => x.tipo === 'aberto');
+        if (outro) outro.inicial = true;
+      }
+    } else if (campo === 'inicial') {
+      for (const x of listaStatus) x.inicial = x === s;
+    } else if (destino) {
+      s.destinos = evento.target.checked ? [...s.destinos, destino] : s.destinos.filter((d) => d !== destino);
+      return;
+    }
+    desenharStatus();
+  });
+  el('lista-status').addEventListener('click', (evento) => {
+    const cartao = evento.target.closest('[data-status]');
+    if (!cartao) return;
+    const i = Number(cartao.dataset.status);
+    const { moverStatus } = evento.target.dataset;
+    if (moverStatus) {
+      const j = i + Number(moverStatus);
+      [listaStatus[i], listaStatus[j]] = [listaStatus[j], listaStatus[i]];
+    } else if ('excluirStatus' in evento.target.dataset) {
+      const [removido] = listaStatus.splice(i, 1);
+      for (const s of listaStatus) s.destinos = s.destinos.filter((d) => d !== removido.id);
+      if (removido.inicial) { const outro = listaStatus.find((x) => x.tipo === 'aberto'); if (outro) outro.inicial = true; }
+    } else return;
+    desenharStatus();
+  });
+  el('novo-status').addEventListener('click', () => {
+    listaStatus.push({ id: `novo-${++statusProvisorio}`, nome: '', tipo: 'aberto', inicial: false, destinos: [], pedidos: 0 });
+    desenharStatus();
+    el('lista-status').querySelector('[data-status]:last-child [data-campo=nome]').focus();
+  });
+  el('form-status').addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    try {
+      await api('/api/status-pedidos', { metodo: 'PUT', corpo: { status: listaStatus.map(({ id, nome, tipo, inicial, destinos }) => ({ id, nome, tipo, inicial, destinos })) } });
+      location.reload(); // os status aparecem nos pedidos, nos filtros e no resumo: recarregar atualiza tudo de uma vez
     } catch (erro) { tratarErro(erro); }
   });
 
