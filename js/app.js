@@ -177,7 +177,7 @@ const App = (() => {
         <nav class="d-flex align-items-center" aria-label="Principal">
           ${elo('/', esc(catalogo.nomePlural))}${elo('/sobre', 'Sobre')}
           ${elo('/carrinho', 'Carrinho', '<span class="contador" id="contador-carrinho" hidden>0</span>')}
-          ${admin ? '' : cliente
+          ${admin ? '<a class="btn btn-solid theme-primary btn-sm botao-entrar" href="/admin">Painel</a>' : cliente
             ? elo('/conta', `Olá, ${esc(cliente.nome.split(' ')[0])}`)
             : '<a class="btn btn-solid theme-primary btn-sm botao-entrar" href="/login">Entrar</a>'}
         </nav>
