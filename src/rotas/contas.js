@@ -9,6 +9,7 @@ const { senhaConfere, novaSenha, gerarHash, sortearSenha } = require('../senhas'
 const { clienteLogado, exigirCliente, abrirSessao, encerrarSessao, derrubarSessoesDoCliente, usuarioLogado, pode } = require('../sessao');
 const { enviarLinkRedefinicao, conferirToken } = require('../redefinicao');
 const configuracoes = require('../configuracoes');
+const auditoria = require('../auditoria');
 const { temaPara, temRascunho } = require('../aparencia');
 
 // Hash de uma senha que ninguém conhece, para o login gastar o mesmo tempo quando a conta não existe.
@@ -54,9 +55,14 @@ module.exports = [
     // Sem conta, confere contra um hash qualquer: a resposta demora o mesmo tanto e não revela se a conta existe.
     const senhaOk = senhaConfere(senha, usuarioEquipe || cliente || CONTA_FALSA);
     // Conta desativada responde igual a senha errada.
-    if (!senhaOk || !(cliente || usuarioEquipe?.ativo)) throw recusar();
+    if (!senhaOk || !(cliente || usuarioEquipe?.ativo)) {
+      // Tentativa recusada em uma conta da equipe fica no registro de atividades (a de clientes, não).
+      if (usuarioEquipe) auditoria.registrar(req, usuarioEquipe, 'Tentativa de entrar no painel recusada', '', { motivo: senhaOk ? 'conta desativada' : 'senha errada' });
+      throw recusar();
+    }
     zerarErros(conta);
     if (usuarioEquipe) {
+      auditoria.registrar(req, usuarioEquipe, 'Entrou no painel');
       abrirSessao(res, { usuarioId: usuarioEquipe.id });
       return { tipo: 'admin' }; // a tela de login usa para decidir entre abrir o painel ou a loja
     }
@@ -137,5 +143,5 @@ module.exports = [
   ['POST', /^\/api\/logout$/, (req, _p, res) => {
     encerrarSessao(req, res);
     return { ok: true };
-  }],
+  }, undefined, 'Saiu do painel'], // o texto só vai para o registro de atividades quando quem sai é da equipe
 ];

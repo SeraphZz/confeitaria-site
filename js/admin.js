@@ -22,7 +22,7 @@ App.pronto.then(async ({ loja, admin, usuario, pode, catalogo, atendimento, modu
   const TODAS_AS_ABAS = [
     ['resumo', 'resumo.ver', carregarResumo], ['pedidos', 'pedidos.ver', carregarPedidos], ['clientes', 'clientes.ver', carregarClientes],
     ['produtos', 'produtos.editar', carregarProdutos], ['aparencia', 'aparencia.editar', carregarAparencia],
-    ['equipe', 'usuarios.gerenciar', carregarEquipe], ['config', null, carregarConfig],
+    ['equipe', 'usuarios.gerenciar', carregarEquipe], ['atividade', 'auditoria.ver', carregarAtividade], ['config', null, carregarConfig],
   ];
   const carregar = {};
   const ABAS = [];
@@ -496,6 +496,46 @@ App.pronto.then(async ({ loja, admin, usuario, pode, catalogo, atendimento, modu
     };
     salvarEquipe(() => (id ? api(`/api/perfis/${id}`, { metodo: 'PUT', corpo }) : api('/api/perfis', { metodo: 'POST', corpo })), id ? 'Perfil atualizado.' : 'Perfil criado.');
   });
+
+  // ------------------------------------------------------------ atividade (registro do que a equipe fez)
+  // Só leitura: o registro não pode ser alterado nem apagado, nem pelo painel nem direto no banco.
+  let atividades = [];
+  let paginaAtividade = { pagina: 0, paginas: 1 };
+  const ROTULOS_DETALHE = { de: 'de', para: 'para', perfil: 'perfil', nome: 'nome', ativo: 'ativo', conceder: 'liberou', negar: 'bloqueou',
+    senhaTrocada: 'senha trocada', permissoes: 'permissões', campos: 'campos', preco: 'preço', disponivel: 'disponível', estoque: 'estoque', motivo: 'motivo' };
+
+  // { de: 'novo', para: 'entregue' } -> "de: Novo · para: Entregue". Valores vazios não aparecem.
+  function detalhesTexto(detalhes) {
+    const nomePermissao = (id) => equipe?.permissoes.find((p) => p.id === id)?.nome || id;
+    return Object.entries(detalhes).map(([chave, valor]) => {
+      if (valor === null || valor === '' || valor === false && chave === 'senhaTrocada' || (Array.isArray(valor) && !valor.length)) return '';
+      let texto = valor;
+      if (chave === 'de' || chave === 'para') texto = STATUS[valor] || valor;
+      else if (chave === 'preco') texto = brl(valor);
+      else if (typeof valor === 'boolean') texto = valor ? 'sim' : 'não';
+      else if (Array.isArray(valor)) texto = valor.map((v) => (['conceder', 'negar', 'permissoes'].includes(chave) ? nomePermissao(v) : v)).join(', ');
+      return `${ROTULOS_DETALHE[chave] || chave}: ${texto}`;
+    }).filter(Boolean).join(' · ');
+  }
+
+  async function carregarAtividade({ mais = false } = {}) {
+    const numero = mais ? paginaAtividade.pagina + 1 : 1;
+    const resposta = await api(`/api/auditoria?pagina=${numero}`);
+    const jaMostradas = new Set(mais ? atividades.map((a) => a.id) : []);
+    atividades = mais ? [...atividades, ...resposta.itens.filter((a) => !jaMostradas.has(a.id))] : resposta.itens;
+    paginaAtividade = resposta;
+    el('mais-atividade').hidden = resposta.pagina >= resposta.paginas;
+    el('lista-atividade').innerHTML = atividades.length ? `
+      <table class="tabela-simples tabela-atividade"><thead><tr><th>Quando</th><th>Quem</th><th>O que fez</th></tr></thead><tbody>
+        ${atividades.map((a) => `<tr>
+          <td>${new Date(a.em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
+          <td>${esc(a.nome)}<br><span class="suave">${esc(a.usuario)}</span></td>
+          <td>${esc(a.acao)}${a.alvo ? `: <strong>${esc(a.alvo)}</strong>` : ''}
+            ${detalhesTexto(a.detalhes) ? `<br><span class="suave">${esc(detalhesTexto(a.detalhes))}</span>` : ''}</td>
+        </tr>`).join('')}
+      </tbody></table>` : '<p class="suave mb-0">Nada registrado ainda.</p>';
+  }
+  el('mais-atividade').addEventListener('click', () => carregarAtividade({ mais: true }).catch(tratarErro));
 
   // ------------------------------------------------------------ configurações
   const CAMPOS_LOJA = ['nome', 'slogan', 'whatsapp', 'instagram', 'email', 'endereco', 'cidade'];

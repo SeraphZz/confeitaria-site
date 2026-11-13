@@ -10,11 +10,11 @@ Requer [Node.js](https://nodejs.org) 24 ou mais novo (o banco usa o SQLite que v
 node server.js
 ```
 
-Abra http://localhost:3000. Na primeira execução o terminal mostra o usuário (`confeiteira`) e uma **senha inicial aleatória** — entre em `/login` e troque em Painel > Configurações.
+Abra http://localhost:3000. Na primeira execução o terminal mostra o usuário (`confeiteira`) e uma **senha inicial aleatória** — entre em `/login` e troque em Painel > Configurações. Essa primeira conta tem o perfil Administrador; as demais pessoas da equipe são criadas por ela em Painel > Equipe.
 
 Variáveis opcionais: `PORT` (porta), `ADMIN_PASSWORD` (define a senha inicial em vez de sortear), `DATA_DIR` (pasta dos dados), `NODE_ENV=production` (cookie de sessão só por HTTPS e cabeçalho HSTS), `BACKUP_MANTER` (quantas cópias de segurança guardar).
 
-**Perdeu a senha de acesso ao painel?** Rode `node scripts/senha-admin.js` (sorteia e mostra uma senha nova) ou `node scripts/senha-admin.js "MinhaSenha123"` (define a que você quiser). Funciona com o servidor ligado.
+**Perdeu a senha de acesso ao painel?** Rode `node scripts/senha-admin.js` (sorteia e mostra uma senha nova para o Administrador) ou `node scripts/senha-admin.js "MinhaSenha123"` (define a que você quiser). Para outra pessoa da equipe: `node scripts/senha-admin.js --usuario maria`. O script reativa a conta, desloga quem estava nela e deixa a troca anotada no registro de atividades. Funciona com o servidor ligado.
 
 Para ver o painel com dados de exemplo: rode `node scripts/demo.js`. `node scripts/demo.js --limpar` remove os pedidos de exemplo.
 
@@ -38,11 +38,12 @@ Os dados ficam em um banco SQLite, o arquivo `data/loja.db`. As fotos ficam em `
 - Acompanhar pedidos e mudar o status (Novo → Confirmado → Em produção → Pronto → Entregue / Cancelado).
 - Ver receita por dia, ticket médio e produtos que mais renderam (7, 30 ou 90 dias).
 - Trocar nome da loja, contatos, endereço, horários, formas de entrega, senha e o nome dado aos produtos em Configurações.
+- Dar acesso ao painel a outras pessoas, cada uma com o próprio usuário e só com as permissões do perfil dela (Equipe), e ver quem fez o quê (Atividade).
 - Mudar cores, letra dos títulos, logotipo e banner em Aparência, vendo como fica antes de publicar.
 
 ## Contas de clientes
 
-O botão **Entrar** do cabeçalho leva a um login único: clientes entram com o e-mail; a loja, com o usuário `confeiteira` (nome fixo por enquanto; as contas individuais de funcionários chegam em uma etapa futura). O cliente cria a própria conta em `/cadastro`, passa a ter os dados preenchidos no carrinho e vê o histórico em `/conta`. **Só clientes logados enviam pedidos**: quem não entrou monta o carrinho normalmente e é convidado a entrar ou criar conta na hora de enviar.
+O botão **Entrar** do cabeçalho leva a um login único: clientes entram com o e-mail; cada pessoa da equipe da loja, com o próprio usuário (ver "Equipe, perfis e permissões"). O cliente cria a própria conta em `/cadastro`, passa a ter os dados preenchidos no carrinho e vê o histórico em `/conta`. **Só clientes logados enviam pedidos**: quem não entrou monta o carrinho normalmente e é convidado a entrar ou criar conta na hora de enviar.
 
 ## CEP e telefone
 
@@ -72,7 +73,7 @@ node server.js
 
 **Sem SMTP configurado**, rodando localmente, o link de redefinição é impresso no terminal do servidor em vez de enviado — serve para testar. Em produção (`NODE_ENV=production`) nada é impresso: configure o SMTP.
 
-A senha do **painel da loja** não é recuperada por e-mail (essa conta não tem e-mail): troque em Painel > Configurações ou com `node scripts/senha-admin.js`.
+A senha de quem é da **equipe da loja** não é recuperada por e-mail (essas contas não têm e-mail): cada um troca a própria em Painel > Configurações, quem gerencia a equipe define uma nova em Painel > Equipe, e em último caso há o `node scripts/senha-admin.js`.
 
 ## Estrutura
 
@@ -85,6 +86,9 @@ src/tema.js      transforma as escolhas de aparência no CSS servido em /tema.cs
 src/aparencia.js rascunho, publicação e descarte do tema
 src/atendimento.js  horários de funcionamento e formas de receber o pedido
 src/catalogo.js  recursos opcionais do catálogo: variações, adicionais e estoque
+src/permissoes.js  lista de permissões da equipe e como se calcula o que cada pessoa pode fazer
+src/equipe.js    regras para criar e alterar pessoas e perfis
+src/auditoria.js registro de atividades da equipe
 src/*.js         sessão, senhas, validação, datas, regras de pedidos, imagens e arquivos estáticos
 banco.js         camada de dados (SQLite): todas as consultas
 migracoes/       estrutura das tabelas, em arquivos numerados (ver abaixo)
@@ -113,7 +117,6 @@ Tudo o que é próprio de um estabelecimento fica no banco (tabela `config`) e p
 | `atendimento` | horários de funcionamento e formas de receber o pedido (retirada, entrega) | qualquer visitante |
 | `modulos` | recursos opcionais ligados: variações, adicionais, estoque | qualquer visitante |
 | `operacao` | fuso horário da loja | só o painel |
-| `admin` | conta de acesso ao painel | ninguém (nunca sai do servidor) |
 
 O painel lê as seções editáveis em `GET /api/configuracoes` e grava uma seção em `PUT /api/configuracoes/<seção>`. Para criar uma configuração nova, acrescente o campo em `padrao` e em `validar` na seção certa; instalações antigas recebem o valor padrão sem precisar de migração.
 
@@ -168,6 +171,28 @@ A estrutura das tabelas fica em `migracoes/`, um arquivo numerado por mudança (
 - Se o banco for mais novo que o programa (alguém voltou o código para uma versão antiga), o servidor se recusa a subir em vez de arriscar os dados.
 - Para criar uma migração, adicione um arquivo com o próximo número, no formato de `migracoes/001-esquema-inicial.js`. Nunca edite uma migração já publicada.
 
+## Equipe, perfis e permissões
+
+Cada pessoa da equipe entra no painel com o próprio usuário e senha (Painel > Equipe). O que ela pode fazer vem do **perfil** dela, com **ajustes individuais** por cima.
+
+- **Permissões.** A lista é fixa e fica em `src/permissoes.js`: ver o resumo, ver pedidos, alterar pedidos, ver clientes, editar o catálogo, editar a página Sobre, mudar a aparência, alterar configurações, gerenciar a equipe e ver o registro de atividades. Cada rota do painel declara a permissão que exige (o 4º item da rota, em `src/rotas/`); o servidor confere em todo pedido. Sem login a resposta é 401; com login e sem a permissão, 403. As telas só escondem o que a pessoa não pode usar: quem decide é o servidor.
+- **Perfis.** Um perfil é um conjunto de permissões. O **Administrador** é fixo: tem sempre todas (inclusive as que forem criadas depois) e não pode ser alterado nem excluído. A instalação traz dois perfis de exemplo, Atendimento e Catálogo, que podem ser alterados ou apagados. Perfil em uso não é excluído.
+- **Ajustes individuais.** Para uma pessoa específica dá para liberar uma permissão que o perfil não tem ou bloquear uma que ele tem.
+- **Ninguém concede o que não possui.** Quem gerencia a equipe só cria ou altera pessoas e perfis dentro das permissões que ele mesmo tem, e não mexe em quem pode mais do que ele (nem para tirar permissões ou trocar a senha). Ninguém altera o próprio perfil, os próprios ajustes ou se desativa. A loja nunca fica sem ao menos um Administrador ativo. As regras ficam em `src/equipe.js`.
+- **Efeito imediato.** Mudar o perfil ou os ajustes vale no pedido seguinte da pessoa, sem novo login. Desativar alguém ou definir uma senha nova para ele desloga a pessoa na hora. Não há exclusão de pessoas, só desativação, para o registro de atividades continuar dizendo quem fez o quê.
+- **Sessões.** Ficam no banco (tabela `sessoes`), com validade de 12 horas, então reiniciar o servidor não desloga ninguém. O banco guarda só o SHA-256 do token do cookie: quem ler o banco ou um backup não consegue entrar como ninguém.
+- **Loja que já existia:** a conta de acesso anterior vira o primeiro Administrador, com o mesmo usuário e a mesma senha.
+
+## Registro de atividades
+
+Painel > Atividade mostra o que a equipe fez: quem entrou (e as tentativas recusadas em contas da equipe), e tudo o que foi criado, alterado ou excluído, com data, pessoa, alvo e um resumo do que mudou (por exemplo, o status de um pedido de "Novo" para "Confirmado").
+
+- O servidor registra sozinho toda rota que altera dados quando quem chama é da equipe; uma rota nova já nasce registrada. Ações de clientes e visitantes não entram.
+- Senhas e o conteúdo enviado nunca são gravados; só o que cada rota escolhe anotar (`src/auditoria.js`).
+- A tabela `auditoria` é só de inserção: gatilhos do próprio banco recusam alterar, apagar ou substituir uma linha, e não existe rota para isso. Quem tem acesso ao arquivo do banco ainda poderia remover os gatilhos de propósito; a proteção é contra engano e contra qualquer caminho pelo site.
+- O registro guarda o nome e o usuário de quem fez, copiados na hora: continua legível se a pessoa mudar de nome ou for desativada.
+- Não há limpeza automática: o registro cresce com o uso (uma linha pequena por ação).
+
 ## Segurança
 
 - **Pedidos vindos de outro site são recusados.** Tudo o que altera dados (login, pedido, cadastro, painel) só é aceito se saiu de uma página do próprio site: o servidor confere o cabeçalho `Origin` (ou `Sec-Fetch-Site`) contra o endereço pelo qual o pedido chegou e contra o `SITE_URL`. Isso impede que uma página qualquer, aberta no navegador de quem está logado, aja em nome dessa pessoa. Atrás de um proxy que troque o cabeçalho `Host`, configure o `SITE_URL` com o endereço público.
@@ -179,6 +204,6 @@ A estrutura das tabelas fica em `migracoes/`, um arquivo numerado por mudança (
 ## Limites conhecidos (de propósito, para manter simples)
 
 - O banco é SQLite, um arquivo no disco do servidor: a hospedagem precisa ter disco persistente. Rode **uma única instância** do servidor.
-- Sessões ficam em memória: reiniciar o servidor desloga todo mundo.
+- Os limites de tentativas ficam em memória: reiniciar o servidor zera as contagens (as sessões, não: elas ficam no banco).
 - Não há pagamento online: o pedido é uma reserva, confirmada pelo WhatsApp.
 - Ao publicar na internet, coloque atrás de HTTPS (ex.: proxy do provedor de hospedagem) e use `NODE_ENV=production` e `TRUST_PROXY=1`. O `TRUST_PROXY=1` faz o limite de tentativas de login contar pelo IP de cada visitante, e não pelo IP do proxy; não ligue se o servidor ficar exposto direto, sem proxy.

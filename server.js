@@ -8,14 +8,16 @@
 const http = require('node:http');
 const { PORTA, HOST } = require('./src/ambiente');
 const { ErroHttp, enviarJson, conferirOrigem } = require('./src/http');
-const { exigirPermissao } = require('./src/sessao');
+const { exigirPermissao, usuarioLogado } = require('./src/sessao');
+const { registrarRota } = require('./src/auditoria');
 const { servirEstatico } = require('./src/estaticos');
 const { garantirDadosIniciais } = require('./src/primeiro-uso');
 
 garantirDadosIniciais();
 
-// Cada rota é [método, caminho, handler, permissão]. A permissão é um id de src/permissoes.js, ou "true" quando basta
-// ser da equipe da loja; rota sem esse item é pública (ou confere o cliente por conta própria).
+// Cada rota é [método, caminho, handler, permissão, texto para o registro de atividades].
+// A permissão é um id de src/permissoes.js, ou "true" quando basta ser da equipe da loja; rota sem esse item é
+// pública (ou confere o cliente por conta própria).
 const rotas = [
   ...require('./src/rotas/contas'),
   ...require('./src/rotas/catalogo'),
@@ -37,11 +39,16 @@ async function atender(req, res) {
   // Tudo o que altera dados só é aceito se o pedido saiu de uma página do próprio site (ver src/http.js).
   if (req.method !== 'GET' && req.method !== 'HEAD') conferirOrigem(req);
 
-  for (const [metodo, re, handler, permissao] of rotas) {
+  for (const [metodo, re, handler, permissao, rotulo] of rotas) {
     const m = metodo === req.method && re.exec(caminho);
     if (!m) continue;
     if (permissao) exigirPermissao(req, permissao); // 401 sem login; 403 sem a permissão
-    return enviarJson(res, 200, await handler(req, m.slice(1), res, url));
+    const daEquipe = usuarioLogado(req); // antes do handler: sair do painel apaga a sessão
+    const resposta = await handler(req, m.slice(1), res, url);
+    // Tudo o que alguém da equipe altera vai para o registro de atividades (src/auditoria.js).
+    // (Rotas públicas sem texto, como o login, cuidam do próprio registro.)
+    if (permissao || rotulo) registrarRota(req, daEquipe, rotulo, caminho);
+    return enviarJson(res, 200, resposta);
   }
   throw new ErroHttp(404, 'Rota não encontrada.');
 }

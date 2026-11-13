@@ -372,6 +372,23 @@ const apagarSessoesVencidas = (agora = Date.now()) => sql('DELETE FROM sessoes W
 const apagarSessoesDoCliente = (clienteId) => sql('DELETE FROM sessoes WHERE cliente_id = ?').run(clienteId);
 const apagarSessoesDoUsuario = (usuarioId, mantendo = '') => sql('DELETE FROM sessoes WHERE usuario_id = ? AND token_hash <> ?').run(usuarioId, mantendo);
 
+// ---------------------------------------------------------------- registro de atividades (auditoria)
+// Só inserção e leitura: o banco recusa UPDATE e DELETE nesta tabela (migração 006).
+
+function inserirAuditoria(r) {
+  sql('INSERT INTO auditoria (em, usuario_id, usuario_login, usuario_nome, acao, alvo, detalhes, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(new Date().toISOString(), r.usuarioId || null, r.usuarioLogin, r.usuarioNome, r.acao, r.alvo || '', JSON.stringify(r.detalhes || {}), r.ip || '');
+}
+
+// Uma página do registro, do mais recente para o mais antigo, e o total de linhas.
+function paginarAuditoria({ pagina = 1, porPagina }) {
+  const total = sql('SELECT COUNT(*) AS n FROM auditoria').get().n;
+  const itens = sql('SELECT * FROM auditoria ORDER BY id DESC LIMIT ? OFFSET ?').all(porPagina, (pagina - 1) * porPagina).map((l) => ({
+    id: l.id, em: l.em, usuario: l.usuario_login, nome: l.usuario_nome, acao: l.acao, alvo: l.alvo, detalhes: JSON.parse(l.detalhes), ip: l.ip,
+  }));
+  return { itens, total };
+}
+
 // ---------------------------------------------------------------- migração do db.json antigo
 // Acontece sozinha, uma única vez: se existe data/db.json e o banco novo está vazio, copia tudo
 // e renomeia o arquivo antigo para db.json.migrado (fica guardado como cópia de segurança).
@@ -424,5 +441,6 @@ module.exports = {
   inserirPedido, listarPedidos, paginarPedidos, pedidoPorId, mudarStatusPedido, contarPedidosComStatus, apagarPedidosDemo,
   listarPerfis, perfilPorId, perfilDeSistema, usuariosNoPerfil, salvarPerfil, apagarPerfil,
   listarUsuarios, usuarioPorId, usuarioPorLogin, contarUsuarios, contarAdministradoresAtivos, salvarUsuario,
+  inserirAuditoria, paginarAuditoria,
   criarSessao, sessaoPorHash, apagarSessao, apagarSessoesVencidas, apagarSessoesDoCliente, apagarSessoesDoUsuario,
 };

@@ -6,6 +6,7 @@
 const { ErroHttp, lerJson, ipDe, limitar, conferirBloqueio, registrarErro, zerarErros } = require('../http');
 const { senhaConfere, novaSenha } = require('../senhas');
 const banco = require('../../banco');
+const { anotar } = require('../auditoria');
 const { usuarioLogado, exigirPermissao, derrubarOutrasSessoesDoUsuario } = require('../sessao');
 const { salvarImagem, removerImagem, LIMITE_JSON_COM_FOTO } = require('../imagens');
 const configuracoes = require('../configuracoes');
@@ -20,19 +21,20 @@ module.exports = [
   // A página Sobre é conteúdo, com permissão própria; as demais seções são configurações da loja.
   ['PUT', /^\/api\/configuracoes\/([a-z]{1,30})$/, async (req, [secao]) => {
     exigirPermissao(req, secao === 'sobre' ? 'conteudo.editar' : 'configuracoes.editar');
+    anotar(req, secao);
     return configuracoes.gravar(secao, await lerJson(req));
-  }, true],
+  }, true, 'Alterou as configurações'],
 
   // Endereços usados pelas telas atuais; equivalem a PUT /api/configuracoes/loja e /sobre.
-  ['PUT', /^\/api\/loja$/, async (req) => configuracoes.gravar('loja', await lerJson(req)), 'configuracoes.editar'],
-  ['PUT', /^\/api\/sobre$/, async (req) => configuracoes.gravar('sobre', await lerJson(req)), 'conteudo.editar'],
+  ['PUT', /^\/api\/loja$/, async (req) => { anotar(req, 'loja'); return configuracoes.gravar('loja', await lerJson(req)); }, 'configuracoes.editar', 'Alterou as configurações'],
+  ['PUT', /^\/api\/sobre$/, async (req) => configuracoes.gravar('sobre', await lerJson(req)), 'conteudo.editar', 'Alterou a página Sobre'],
 
   ['PUT', /^\/api\/sobre\/imagem$/, async (req) => {
     const { imagem } = await lerJson(req, LIMITE_JSON_COM_FOTO);
     const sobre = configuracoes.ler('sobre');
     if (imagem) salvarImagem(sobre, imagem, 'sobre'); else removerImagem(sobre);
     return configuracoes.substituir('sobre', sobre);
-  }, 'conteudo.editar'],
+  }, 'conteudo.editar', 'Trocou a foto da página Sobre'],
 
   // ---- Aparência: tudo o que se altera fica como rascunho até publicar (ver src/aparencia.js).
   // Todas respondem { publicado, rascunho }: o que os clientes veem e o que está pendente (null = nada pendente).
@@ -44,16 +46,17 @@ module.exports = [
   }), 'aparencia.editar'],
 
   // Cores e letra dos títulos.
-  ['PUT', /^\/api\/tema\/rascunho$/, async (req) => aparencia.salvarRascunho(await lerJson(req)), 'aparencia.editar'],
+  ['PUT', /^\/api\/tema\/rascunho$/, async (req) => aparencia.salvarRascunho(await lerJson(req)), 'aparencia.editar', 'Alterou o rascunho da aparência'],
 
   // Imagens: cada envio substitui a anterior no rascunho; enviar vazio remove.
   ['PUT', /^\/api\/tema\/rascunho\/imagem\/(logo|favicon|banner)$/, async (req, [qual]) => {
     const { imagem } = await lerJson(req, LIMITE_JSON_COM_FOTO);
+    anotar(req, qual);
     return aparencia.trocarImagem(qual, imagem || '');
-  }, 'aparencia.editar'],
+  }, 'aparencia.editar', 'Trocou uma imagem no rascunho da aparência'],
 
-  ['POST', /^\/api\/tema\/publicar$/, () => aparencia.publicar(), 'aparencia.editar'],
-  ['DELETE', /^\/api\/tema\/rascunho$/, () => aparencia.descartar(), 'aparencia.editar'],
+  ['POST', /^\/api\/tema\/publicar$/, () => aparencia.publicar(), 'aparencia.editar', 'Publicou a aparência'],
+  ['DELETE', /^\/api\/tema\/rascunho$/, () => aparencia.descartar(), 'aparencia.editar', 'Descartou o rascunho da aparência'],
 
   ['PUT', /^\/api\/senha$/, async (req) => {
     limitar(`senha:${ipDe(req)}`, 8, 15 * 60 * 1000);
@@ -67,5 +70,5 @@ module.exports = [
     banco.salvarUsuario({ ...usuario, ...novaSenha(nova), senhaInicial: false });
     derrubarOutrasSessoesDoUsuario(req, usuario.id);
     return { ok: true };
-  }, true],
+  }, true, 'Trocou a própria senha'],
 ];

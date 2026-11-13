@@ -10,6 +10,7 @@ const { salvarImagem, removerImagem, LIMITE_JSON_COM_FOTO } = require('../imagen
 const { criarSlug } = require('../primeiro-uso');
 const configuracoes = require('../configuracoes');
 const { modulos, paraVitrine, aplicarOpcionais } = require('../catalogo');
+const { anotar } = require('../auditoria');
 
 function acharProduto(id) {
   const produto = banco.produtoPorId(id);
@@ -61,8 +62,9 @@ module.exports = [
     if (banco.listarCategorias().length >= MAX_CATEGORIAS) throw new ErroHttp(400, `O limite é de ${MAX_CATEGORIAS} categorias.`);
     const categoria = { id: crypto.randomUUID(), nome: lerNomeCategoria(corpo.nome) };
     banco.salvarCategoria(categoria);
+    anotar(req, categoria.nome);
     return categoria;
-  }, 'produtos.editar'],
+  }, 'produtos.editar', 'Criou uma categoria'],
 
   // Recebe os ids de todas as categorias, na nova ordem.
   ['PUT', /^\/api\/categorias\/ordem$/, async (req) => {
@@ -72,20 +74,23 @@ module.exports = [
     if (!mesmaLista) throw new ErroHttp(409, 'A lista de categorias mudou. Recarregue a página.');
     banco.ordenarCategorias(ids);
     return banco.listarCategorias();
-  }, 'produtos.editar'],
+  }, 'produtos.editar', 'Reordenou as categorias'],
 
   ['PUT', /^\/api\/categorias\/([0-9a-f-]{36})$/, async (req, [id]) => {
     const corpo = await lerJson(req);
     const categoria = acharCategoria(id);
     categoria.nome = lerNomeCategoria(corpo.nome, id);
     banco.salvarCategoria(categoria);
+    anotar(req, categoria.nome);
     return categoria;
-  }, 'produtos.editar'],
+  }, 'produtos.editar', 'Renomeou uma categoria'],
 
   ['DELETE', /^\/api\/categorias\/([0-9a-f-]{36})$/, (req, [id]) => {
-    banco.apagarCategoria(acharCategoria(id).id);
+    const categoria = acharCategoria(id);
+    banco.apagarCategoria(categoria.id);
+    anotar(req, categoria.nome);
     return { ok: true };
-  }, 'produtos.editar'],
+  }, 'produtos.editar', 'Excluiu uma categoria'],
 
   // ---- produtos
   // Tudo o que sai daqui passa por `paraVitrine`: variações, adicionais e estoque só aparecem com o recurso ligado.
@@ -107,8 +112,9 @@ module.exports = [
     aplicarCampos(produto, { nome: '', ...corpo });
     produto.slug = criarSlug(produto.nome, banco.listarProdutos().map((p) => p.slug));
     banco.salvarProduto(produto);
+    anotar(req, produto.nome);
     return paraVitrine(produto);
-  }, 'produtos.editar'],
+  }, 'produtos.editar', 'Criou um produto'],
 
   ['PUT', /^\/api\/produtos\/([0-9a-f-]{36})$/, async (req, [id]) => {
     // O corpo é lido antes de buscar o produto: entre buscar e gravar não há espera, então nada muda no meio.
@@ -116,21 +122,25 @@ module.exports = [
     const produto = acharProduto(id);
     aplicarCampos(produto, corpo);
     banco.salvarProduto(produto);
+    // No registro de atividades ficam os campos enviados e como ficaram preço, disponibilidade e estoque.
+    anotar(req, produto.nome, { campos: Object.keys(corpo).slice(0, 20), preco: produto.preco, disponivel: produto.disponivel, estoque: produto.estoque });
     return paraVitrine(produto);
-  }, 'produtos.editar'],
+  }, 'produtos.editar', 'Alterou um produto'],
 
   ['DELETE', /^\/api\/produtos\/([0-9a-f-]{36})$/, (req, [id]) => {
     const produto = acharProduto(id);
     removerImagem(produto);
     banco.apagarProduto(produto.id);
+    anotar(req, produto.nome);
     return { ok: true };
-  }, 'produtos.editar'],
+  }, 'produtos.editar', 'Excluiu um produto'],
 
   ['PUT', /^\/api\/produtos\/([0-9a-f-]{36})\/imagem$/, async (req, [id]) => {
     const { imagem } = await lerJson(req, LIMITE_JSON_COM_FOTO);
     const produto = acharProduto(id);
     if (imagem) salvarImagem(produto, imagem); else removerImagem(produto);
     banco.salvarProduto(produto);
+    anotar(req, produto.nome);
     return paraVitrine(produto);
-  }, 'produtos.editar'],
+  }, 'produtos.editar', 'Trocou a foto de um produto'],
 ];

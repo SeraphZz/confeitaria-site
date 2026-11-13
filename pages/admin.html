@@ -24,6 +24,7 @@
         <button type="button" role="tab" data-aba="produtos">Produtos</button>
         <button type="button" role="tab" data-aba="aparencia">Aparência</button>
         <button type="button" role="tab" data-aba="equipe">Equipe</button>
+        <button type="button" role="tab" data-aba="atividade">Atividade</button>
         <button type="button" role="tab" data-aba="config">Configurações</button>
       </div>
 
@@ -186,6 +187,12 @@
           <div id="lista-perfis"></div>
           <form class="painel-edicao mt-4" id="form-perfil" hidden></form>
         </div>
+      </section>
+
+      <section id="aba-atividade" hidden>
+        <p class="suave fs-sm">O que a equipe fez no painel, do mais recente para o mais antigo: quem entrou, e tudo o que foi criado, alterado ou excluído. Este registro não pode ser alterado nem apagado.</p>
+        <div class="painel mb-4" style="overflow-x: auto" id="lista-atividade"></div>
+        <button type="button" class="btn btn-outline theme-primary" id="mais-atividade" hidden>Carregar mais</button>
       </section>
 
       <section id="aba-config" hidden>

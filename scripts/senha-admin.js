@@ -47,6 +47,8 @@ banco.transacao(() => {
     senhaInicial: !senhaInformada, // senha sorteada: o painel lembra de trocar
   });
   banco.apagarSessoesDoUsuario(usuario.id);
+  // Fica no registro de atividades, em nome da própria conta, que a senha foi redefinida por aqui.
+  banco.inserirAuditoria({ usuarioId: usuario.id, usuarioLogin: usuario.usuario, usuarioNome: usuario.nome, acao: 'Senha redefinida pelo script do servidor (scripts/senha-admin.js)' });
 });
 
 console.log('\n==============================================');

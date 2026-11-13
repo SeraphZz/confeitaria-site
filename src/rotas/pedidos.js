@@ -4,6 +4,7 @@
 const banco = require('../../banco');
 const { ErroHttp, lerJson, ipDe, limitar, lerPagina, pagina } = require('../http');
 const { exigirCliente, usuarioLogado } = require('../sessao');
+const { anotar } = require('../auditoria');
 const { STATUS, STATUS_ABERTOS, criarPedido, mudarStatus, montarClientes, montarDashboard } = require('../pedidos');
 
 const POR_PAGINA = 30; // pedidos e clientes por página no painel
@@ -41,8 +42,10 @@ module.exports = [
     if (!STATUS.includes(status)) throw new ErroHttp(400, 'Status inválido.');
     const pedido = banco.pedidoPorId(id);
     if (!pedido) throw new ErroHttp(404, 'Pedido não encontrado.');
-    return mudarStatus(pedido, status); // cancelar e reabrir acertam o estoque
-  }, 'pedidos.alterar'],
+    const atualizado = mudarStatus(pedido, status); // cancelar e reabrir acertam o estoque
+    anotar(req, `Pedido nº ${pedido.numero}`, { de: pedido.status, para: status });
+    return atualizado;
+  }, 'pedidos.alterar', 'Alterou o status de um pedido'],
 
   ['GET', /^\/api\/dashboard$/, (req, _p, _res, url) => {
     const dias = Number(url.searchParams.get('dias'));
