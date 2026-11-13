@@ -120,7 +120,7 @@ test('forma de receber desligada não aceita pedido, mesmo que o navegador envie
   delete semTipo.entrega.tipo;
   assert.equal((await cliente.post('/api/pedidos', semTipo)).status, 400);
 
-  assert.equal((await loja.get('/api/pedidos')).dados.length, 2);
+  assert.equal((await loja.get('/api/pedidos')).dados.itens.length, 2);
 });
 
 test('endereço da loja é opcional e aparece para o visitante', async () => {

@@ -7,7 +7,7 @@
 
 const http = require('node:http');
 const { PORTA, HOST } = require('./src/ambiente');
-const { ErroHttp, enviarJson } = require('./src/http');
+const { ErroHttp, enviarJson, conferirOrigem } = require('./src/http');
 const { ehAdmin } = require('./src/sessao');
 const { servirEstatico } = require('./src/estaticos');
 const { garantirDadosIniciais } = require('./src/primeiro-uso');
@@ -31,6 +31,9 @@ async function atender(req, res) {
     if (req.method !== 'GET' && req.method !== 'HEAD') throw new ErroHttp(405, 'Método não permitido.');
     return servirEstatico(req, caminho, res, url.search);
   }
+
+  // Tudo o que altera dados só é aceito se o pedido saiu de uma página do próprio site (ver src/http.js).
+  if (req.method !== 'GET' && req.method !== 'HEAD') conferirOrigem(req);
 
   for (const [metodo, re, handler, exigeAdmin] of rotas) {
     const m = metodo === req.method && re.exec(caminho);

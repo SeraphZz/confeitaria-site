@@ -2,10 +2,12 @@
 // Rotas de pedidos: o cliente cria; a loja lista, muda o status e vê clientes e resumo.
 
 const banco = require('../../banco');
-const { ErroHttp, lerJson, ipDe, limitar } = require('../http');
+const { ErroHttp, lerJson, ipDe, limitar, lerPagina, pagina } = require('../http');
 const { exigirCliente } = require('../sessao');
-const { STATUS, criarPedido, mudarStatus, montarClientes, montarDashboard } = require('../pedidos');
+const { STATUS, STATUS_ABERTOS, criarPedido, mudarStatus, montarClientes, montarDashboard } = require('../pedidos');
 const configuracoes = require('../configuracoes');
+
+const POR_PAGINA = 30; // pedidos e clientes por página no painel
 
 module.exports = [
   ['POST', /^\/api\/pedidos$/, async (req) => {
@@ -15,9 +17,25 @@ module.exports = [
     return { numero: pedido.numero, total: pedido.total };
   }],
 
-  ['GET', /^\/api\/pedidos$/, () => banco.listarPedidos().reverse(), true],
+  // Lista paginada, do mais novo para o mais antigo: ?pagina=2&status=abertos (ou "todos", ou um status).
+  ['GET', /^\/api\/pedidos$/, (req, _p, _res, url) => {
+    const filtro = url.searchParams.get('status') || 'todos';
+    if (filtro !== 'todos' && filtro !== 'abertos' && !STATUS.includes(filtro)) throw new ErroHttp(400, 'Status inválido.');
+    const status = filtro === 'todos' ? undefined : filtro === 'abertos' ? STATUS_ABERTOS : [filtro];
+    const numero = lerPagina(url);
+    const { pedidos, total } = banco.paginarPedidos({ status, pagina: numero, porPagina: POR_PAGINA });
+    return pagina(pedidos, total, numero, POR_PAGINA);
+  }, true],
 
-  ['GET', /^\/api\/clientes$/, () => montarClientes(), true],
+  // Pessoas e o que cada uma já pediu, de quem mais comprou para quem menos comprou: ?pagina=2&busca=ana.
+  // A busca olha nome, telefone e e-mail.
+  ['GET', /^\/api\/clientes$/, (req, _p, _res, url) => {
+    const busca = (url.searchParams.get('busca') || '').trim().toLowerCase().slice(0, 80);
+    const todos = montarClientes();
+    const achados = busca ? todos.filter((c) => `${c.nome} ${c.telefone} ${c.email}`.toLowerCase().includes(busca)) : todos;
+    const numero = lerPagina(url);
+    return pagina(achados.slice((numero - 1) * POR_PAGINA, numero * POR_PAGINA), achados.length, numero, POR_PAGINA);
+  }, true],
 
   ['PATCH', /^\/api\/pedidos\/([0-9a-f-]{36})$/, async (req, [id]) => {
     const { status } = await lerJson(req);

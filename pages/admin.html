@@ -60,12 +60,14 @@
           <select id="filtro-status" class="form-control" style="max-width: 14rem"></select>
         </div>
         <div id="lista-pedidos"></div>
+        <button type="button" class="btn btn-outline theme-primary" id="mais-pedidos" hidden>Carregar mais pedidos</button>
       </section>
 
       <section id="aba-clientes" hidden>
         <p class="suave fs-sm">Pedidos agrupados por pessoa, de quem mais comprou para quem menos comprou. Toque em uma pessoa para ver os pedidos dela. Quem pediu sem cadastro é agrupado pelo telefone; cancelados não entram no total.</p>
         <input id="busca-cliente" class="form-control mb-5" type="search" placeholder="Buscar por nome, telefone ou e-mail" aria-label="Buscar cliente" style="max-width: 24rem">
         <div id="lista-clientes"></div>
+        <button type="button" class="btn btn-outline theme-primary" id="mais-clientes" hidden>Carregar mais clientes</button>
       </section>
 
       <section id="aba-produtos" hidden>

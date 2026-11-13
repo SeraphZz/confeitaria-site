@@ -76,7 +76,7 @@ Adicione a linha (todo dia às 3h):
 0 3 * * * cd /opt/confeitaria && DATA_DIR=/var/lib/confeitaria /usr/bin/node scripts/backup.js
 ```
 
-As cópias ficam em `/var/lib/confeitaria/backups`. Baixe uma para o seu computador de vez em quando, junto com `/var/lib/confeitaria/uploads` (as fotos).
+Cada cópia é uma pasta em `/var/lib/confeitaria/backups` com o banco (`loja.db`) e as fotos (`uploads/`). O script guarda as 14 mais recentes e apaga as mais antigas; para guardar mais, acrescente `--manter 30` ao fim da linha. Baixe uma cópia para o seu computador de vez em quando: se a máquina se perder, as cópias que estão nela se perdem junto.
 
 ## Atualizar o site depois
 

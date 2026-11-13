@@ -2,7 +2,7 @@
 // Rotas de configuração, só da loja: dados de contato, página Sobre, operação e senha de acesso ao painel.
 // As regras de cada configuração (campos, limites, o que é público) ficam em src/configuracoes.js.
 
-const { ErroHttp, lerJson, ipDe, limitar } = require('../http');
+const { ErroHttp, lerJson, ipDe, limitar, conferirBloqueio, registrarErro, zerarErros } = require('../http');
 const { senhaConfere, novaSenha } = require('../senhas');
 const { derrubarOutrasSessoesAdmin } = require('../sessao');
 const { salvarImagem, removerImagem, LIMITE_JSON_COM_FOTO } = require('../imagens');
@@ -53,7 +53,9 @@ module.exports = [
     limitar(`senha:${ipDe(req)}`, 8, 15 * 60 * 1000);
     const { atual, nova } = await lerJson(req);
     const admin = configuracoes.ler('admin');
-    if (!senhaConfere(atual, admin)) throw new ErroHttp(400, 'A senha atual não confere.');
+    conferirBloqueio('senha:admin');
+    if (!senhaConfere(atual, admin)) { registrarErro('senha:admin'); throw new ErroHttp(400, 'A senha atual não confere.'); }
+    zerarErros('senha:admin');
     configuracoes.substituir('admin', { ...admin, ...novaSenha(nova), senhaInicial: false });
     derrubarOutrasSessoesAdmin(req);
     return { ok: true };

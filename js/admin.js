@@ -152,14 +152,24 @@ App.pronto.then(async ({ loja, admin, catalogo, atendimento, modulos }) => {
           ${p.observacoes ? `<div class="mt-1"><strong>Obs.:</strong> ${esc(p.observacoes)}</div>` : ''}
         </div>
       </article>`).join('') : '<p class="suave">Nenhum pedido aqui por enquanto.</p>';
+    el('mais-pedidos').hidden = paginaPedidos.pagina >= paginaPedidos.paginas;
   }
 
-  async function carregarPedidos() {
-    pedidos = await api('/api/pedidos');
+  // Os pedidos vêm do servidor uma página por vez, já filtrados pelo status escolhido; "Carregar mais" busca a
+  // página seguinte e junta à lista. (O filtro em desenharPedidos continua valendo para o que muda de status na tela.)
+  let paginaPedidos = { pagina: 0, paginas: 1 };
+  async function carregarPedidos({ mais = false } = {}) {
+    const numero = mais ? paginaPedidos.pagina + 1 : 1;
+    const resposta = await api(`/api/pedidos?status=${encodeURIComponent(el('filtro-status').value)}&pagina=${numero}`);
+    // Se chegou pedido novo enquanto a tela estava aberta, a página seguinte repete algum já mostrado: esse é descartado.
+    const jaMostrados = new Set(mais ? pedidos.map((p) => p.id) : []);
+    pedidos = mais ? [...pedidos, ...resposta.itens.filter((p) => !jaMostrados.has(p.id))] : resposta.itens;
+    paginaPedidos = resposta;
     desenharPedidos();
   }
 
-  el('filtro-status').addEventListener('change', desenharPedidos);
+  el('filtro-status').addEventListener('change', () => carregarPedidos().catch(tratarErro));
+  el('mais-pedidos').addEventListener('click', () => carregarPedidos({ mais: true }).catch(tratarErro));
   el('lista-pedidos').addEventListener('change', async (evento) => {
     const id = evento.target.dataset.pedido;
     if (!id) return;
@@ -178,9 +188,8 @@ App.pronto.then(async ({ loja, admin, catalogo, atendimento, modulos }) => {
   let pessoas = [];
 
   function desenharClientes() {
-    const busca = el('busca-cliente').value.trim().toLowerCase();
-    const visiveis = pessoas.filter((p) => !busca || `${p.nome} ${p.telefone} ${p.email}`.toLowerCase().includes(busca));
-    el('lista-clientes').innerHTML = visiveis.length ? visiveis.map((p) => `
+    el('mais-clientes').hidden = paginaClientes.pagina >= paginaClientes.paginas;
+    el('lista-clientes').innerHTML = pessoas.length ? pessoas.map((p) => `
       <details class="pedido">
         <summary class="pedido-topo">
           <div>
@@ -200,11 +209,24 @@ App.pronto.then(async ({ loja, admin, catalogo, atendimento, modulos }) => {
       </details>`).join('') : '<p class="suave">Ninguém encontrado.</p>';
   }
 
-  async function carregarClientes() {
-    pessoas = await api('/api/clientes');
+  // Uma página por vez; a busca é feita no servidor, em todos os clientes (não só nos que já estão na tela).
+  let paginaClientes = { pagina: 0, paginas: 1 };
+  let consultaClientes = 0;
+  async function carregarClientes({ mais = false } = {}) {
+    const consulta = ++consultaClientes;
+    const numero = mais ? paginaClientes.pagina + 1 : 1;
+    const resposta = await api(`/api/clientes?busca=${encodeURIComponent(el('busca-cliente').value.trim())}&pagina=${numero}`);
+    if (consulta !== consultaClientes) return; // a pessoa continuou digitando: vale a resposta da busca mais recente
+    pessoas = mais ? [...pessoas, ...resposta.itens] : resposta.itens;
+    paginaClientes = resposta;
     desenharClientes();
   }
-  el('busca-cliente').addEventListener('input', desenharClientes);
+  let esperaBusca;
+  el('busca-cliente').addEventListener('input', () => {
+    clearTimeout(esperaBusca); // espera a pessoa parar de digitar
+    esperaBusca = setTimeout(() => carregarClientes().catch(tratarErro), 300);
+  });
+  el('mais-clientes').addEventListener('click', () => carregarClientes({ mais: true }).catch(tratarErro));
 
   // ------------------------------------------------------------ produtos
   let categorias = [];

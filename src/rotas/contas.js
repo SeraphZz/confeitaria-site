@@ -3,13 +3,15 @@
 
 const crypto = require('node:crypto');
 const banco = require('../../banco');
-const { ErroHttp, lerJson, ipDe, limitar } = require('../http');
+const { ErroHttp, lerJson, ipDe, limitar, conferirBloqueio, registrarErro, zerarErros, lerPagina, pagina } = require('../http');
 const { texto, lerEmail, lerTelefone, lerEndereco } = require('../validacao');
 const { senhaConfere, novaSenha } = require('../senhas');
 const { clienteLogado, exigirCliente, abrirSessao, encerrarSessao, derrubarSessoesDoCliente, ehAdmin } = require('../sessao');
 const { enviarLinkRedefinicao, conferirToken } = require('../redefinicao');
 const configuracoes = require('../configuracoes');
 const { temaPara, temRascunho } = require('../aparencia');
+
+const PEDIDOS_POR_PAGINA = 20; // histórico em "Minha conta"
 
 // O que pode sair do servidor sobre um cliente (nunca salt/hash).
 function clientePublico(c) {
@@ -32,16 +34,24 @@ module.exports = [
     // Login único: a loja entra com o usuário dela; clientes, com o e-mail.
     const { usuario, senha } = await lerJson(req);
     const login = typeof usuario === 'string' ? usuario.trim().toLowerCase() : '';
+    // Além do limite por IP, cada conta aceita poucos erros de senha seguidos, venham de onde vierem. A contagem é
+    // pelo que foi digitado, exista a conta ou não: assim o bloqueio também não revela quem é cliente.
+    const conta = `login:${login.slice(0, 120)}`;
+    conferirBloqueio(conta);
+    const recusar = () => { registrarErro(conta); return new ErroHttp(401, 'E-mail/usuário ou senha incorretos.'); };
+
     const admin = configuracoes.ler('admin');
     if (login === admin.usuario) {
-      if (!senhaConfere(senha, admin)) throw new ErroHttp(401, 'E-mail/usuário ou senha incorretos.');
+      if (!senhaConfere(senha, admin)) throw recusar();
+      zerarErros(conta);
       abrirSessao(res, { tipo: 'admin' });
       return { tipo: 'admin' };
     }
     const cliente = banco.clientePorEmail(login);
     // Sem conta, confere contra um hash qualquer: a resposta demora o mesmo tanto e não revela se o e-mail existe.
     const senhaOk = senhaConfere(senha, cliente || admin);
-    if (!cliente || !senhaOk) throw new ErroHttp(401, 'E-mail/usuário ou senha incorretos.');
+    if (!cliente || !senhaOk) throw recusar();
+    zerarErros(conta);
     abrirSessao(res, { tipo: 'cliente', clienteId: cliente.id });
     return { tipo: 'cliente' };
   }],
@@ -96,7 +106,10 @@ module.exports = [
     const endereco = lerEndereco(corpo.endereco, false);
     if (corpo.novaSenha) {
       limitar(`senha:${ipDe(req)}`, 8, 15 * 60 * 1000);
-      if (!senhaConfere(corpo.senhaAtual, cliente)) throw new ErroHttp(400, 'A senha atual não confere.');
+      const conta = `senha:${cliente.id}`;
+      conferirBloqueio(conta);
+      if (!senhaConfere(corpo.senhaAtual, cliente)) { registrarErro(conta); throw new ErroHttp(400, 'A senha atual não confere.'); }
+      zerarErros(conta);
       Object.assign(cliente, novaSenha(corpo.novaSenha));
     }
     Object.assign(cliente, { nome, telefone, endereco });
@@ -104,10 +117,13 @@ module.exports = [
     return clientePublico(cliente);
   }],
 
-  ['GET', /^\/api\/conta\/pedidos$/, (req) => {
+  ['GET', /^\/api\/conta\/pedidos$/, (req, _p, _res, url) => {
     const cliente = exigirCliente(req);
-    return banco.listarPedidos({ clienteId: cliente.id }).reverse()
-      .map(({ numero, criadoEm, entrega, itens, total, status }) => ({ numero, criadoEm, entrega, itens, total, status }));
+    // Do mais novo para o mais antigo, uma página por vez (?pagina=2...).
+    const numero = lerPagina(url);
+    const { pedidos, total } = banco.paginarPedidos({ clienteId: cliente.id, pagina: numero, porPagina: PEDIDOS_POR_PAGINA });
+    const resumidos = pedidos.map(({ numero: n, criadoEm, entrega, itens, total: valor, status }) => ({ numero: n, criadoEm, entrega, itens, total: valor, status }));
+    return pagina(resumidos, total, numero, PEDIDOS_POR_PAGINA);
   }],
 
   ['POST', /^\/api\/logout$/, (req, _p, res) => {

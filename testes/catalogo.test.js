@@ -42,7 +42,7 @@ test('pedido aceita o campo antigo "doceId" (carrinho guardado antes da atualiza
   });
   assert.equal(r.status, 200);
   assert.equal(r.dados.total, produto.preco * 2);
-  const [pedido] = (await loja.get('/api/pedidos')).dados;
+  const [pedido] = (await loja.get('/api/pedidos')).dados.itens;
   assert.equal(pedido.itens[0].produtoId, produto.id);
   assert.equal('doceId' in pedido.itens[0], false);
 });

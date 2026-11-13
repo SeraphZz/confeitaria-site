@@ -7,7 +7,17 @@ App.pronto.then(async ({ loja, admin, cliente, catalogo }) => {
   const { esc, brl, dataBr, api, aviso, STATUS } = App;
   document.title = `Minha conta · ${loja.nome}`;
 
-  const pedidos = await api('/api/conta/pedidos');
+  // O histórico vem uma página por vez, do pedido mais novo para o mais antigo.
+  let historico = await api('/api/conta/pedidos');
+  const pedidoHtml = (p) => `
+          <article class="pedido">
+            <div class="pedido-topo">
+              <div><strong>Pedido nº ${p.numero}</strong> <span class="selo${['entregue', 'cancelado'].includes(p.status) ? ' cinza' : ''}">${STATUS[p.status]}</span>
+                <div class="suave fs-sm">feito em ${dataBr(p.criadoEm)} · ${p.entrega.tipo === 'entrega' ? 'entrega' : 'retirada'} em ${dataBr(p.entrega.data)}</div></div>
+              <strong>${brl(p.total)}</strong>
+            </div>
+            <ul>${p.itens.map((i) => `<li>${i.quantidade}× ${esc(i.nome + App.opcoesTexto(i.variacao, i.adicionais))}${i.observacoes ? ` <em>(${esc(i.observacoes)})</em>` : ''}</li>`).join('')}</ul>
+          </article>`;
   document.getElementById('conteudo').innerHTML = `
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-5">
       <h1 class="secao-titulo mb-0">Minha conta</h1>
@@ -38,20 +48,23 @@ App.pronto.then(async ({ loja, admin, cliente, catalogo }) => {
       </div>
       <div class="col-12 lg:col-7">
         <h2 class="fs-lg mb-4">Meus pedidos</h2>
-        ${pedidos.length ? pedidos.map((p) => `
-          <article class="pedido">
-            <div class="pedido-topo">
-              <div><strong>Pedido nº ${p.numero}</strong> <span class="selo${['entregue', 'cancelado'].includes(p.status) ? ' cinza' : ''}">${STATUS[p.status]}</span>
-                <div class="suave fs-sm">feito em ${dataBr(p.criadoEm)} · ${p.entrega.tipo === 'entrega' ? 'entrega' : 'retirada'} em ${dataBr(p.entrega.data)}</div></div>
-              <strong>${brl(p.total)}</strong>
-            </div>
-            <ul>${p.itens.map((i) => `<li>${i.quantidade}× ${esc(i.nome + App.opcoesTexto(i.variacao, i.adicionais))}${i.observacoes ? ` <em>(${esc(i.observacoes)})</em>` : ''}</li>`).join('')}</ul>
-          </article>`).join('')
-        : `<p class="suave">Você ainda não fez pedidos.</p><a class="btn btn-solid theme-primary" href="/">Escolher ${esc(App.minusculas(catalogo.nomePlural))}</a>`}
+        ${historico.itens.length
+          ? `<div id="meus-pedidos">${historico.itens.map(pedidoHtml).join('')}</div>
+        <button type="button" class="btn btn-outline theme-primary" id="mais-pedidos" ${historico.pagina >= historico.paginas ? 'hidden' : ''}>Ver pedidos mais antigos</button>`
+          : `<p class="suave">Você ainda não fez pedidos.</p><a class="btn btn-solid theme-primary" href="/">Escolher ${esc(App.minusculas(catalogo.nomePlural))}</a>`}
       </div>
     </div>`;
 
   const campo = (id) => document.getElementById(id);
+  campo('mais-pedidos')?.addEventListener('click', async () => {
+    try {
+      historico = await api(`/api/conta/pedidos?pagina=${historico.pagina + 1}`);
+      campo('meus-pedidos').insertAdjacentHTML('beforeend', historico.itens.map(pedidoHtml).join(''));
+      campo('mais-pedidos').hidden = historico.pagina >= historico.paginas;
+    } catch (erro) {
+      aviso(erro.message, { erro: true });
+    }
+  });
   App.ligarMascaras(campo('form-conta'));
   campo('sair-conta').addEventListener('click', App.sair);
   campo('form-conta').addEventListener('submit', async (evento) => {

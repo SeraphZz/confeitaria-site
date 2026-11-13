@@ -259,7 +259,23 @@ function listarPedidos({ clienteId, desde } = {}) {
   return buscarPedidos();
 }
 
-const pedidoPorId = (id) => buscarPedidos('WHERE p.id = ?', [String(id)])[0] || null;
+// Uma página de pedidos, do mais novo para o mais antigo, e o total que casa com o filtro.
+// `status`: lista de status aceitos (omitir = todos); `clienteId`: só os pedidos de um cliente.
+function paginarPedidos({ status, clienteId, pagina = 1, porPagina }) {
+  const condicoes = [];
+  const parametros = [];
+  if (clienteId) { condicoes.push('p.cliente_id = ?'); parametros.push(clienteId); }
+  if (status) { condicoes.push(`p.status IN (${status.map(() => '?').join(', ')})`); parametros.push(...status); }
+  const filtro = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '';
+
+  const total = sql(`SELECT COUNT(*) AS n FROM pedidos p ${filtro}`).get(...parametros).n;
+  const numeros = sql(`SELECT p.numero FROM pedidos p ${filtro} ORDER BY p.criado_em DESC, p.numero DESC LIMIT ? OFFSET ?`)
+    .all(...parametros, porPagina, (pagina - 1) * porPagina).map((l) => l.numero);
+  if (!numeros.length) return { pedidos: [], total };
+  return { pedidos: buscarPedidos(`WHERE p.numero IN (${numeros.map(() => '?').join(', ')})`, numeros).reverse(), total };
+}
+
+const pedidoPorId =(id) => buscarPedidos('WHERE p.id = ?', [String(id)])[0] || null;
 
 function mudarStatusPedido(id, status) {
   sql('UPDATE pedidos SET status = ? WHERE id = ?').run(status, id);
@@ -315,5 +331,5 @@ module.exports = {
   listarProdutos, produtoPorId, produtoPorSlug, salvarProduto, apagarProduto,
   baixarEstoque, devolverEstoque, trocarSituacaoEstoque,
   listarClientes, clientePorId, clientePorEmail, salvarCliente,
-  inserirPedido, listarPedidos, pedidoPorId, mudarStatusPedido, contarPedidosComStatus, apagarPedidosDemo,
+  inserirPedido, listarPedidos, paginarPedidos, pedidoPorId, mudarStatusPedido, contarPedidosComStatus, apagarPedidosDemo,
 };

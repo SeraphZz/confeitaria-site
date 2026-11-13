@@ -23,8 +23,8 @@ const ligar = (modulos) => loja.put('/api/configuracoes/modulos', modulos);
 const editar = (produto, corpo) => loja.put(`/api/produtos/${produto.id}`, corpo);
 const ver = async (produto, quem = visitante) => (await quem.get(`/api/produtos/${produto.slug}`)).dados;
 const pedir = (itens) => cliente.post('/api/pedidos', { cliente: { nome: dados.nome, telefone: dados.telefone }, entrega: { tipo: 'retirada', data: hojeLocal(1) }, itens });
-const ultimoPedido = async () => (await loja.get('/api/pedidos')).dados[0];
-const quantosPedidos = async () => (await loja.get('/api/pedidos')).dados.length;
+const ultimoPedido = async () => (await loja.get('/api/pedidos')).dados.itens[0];
+const quantosPedidos = async () => (await loja.get('/api/pedidos')).dados.total;
 const mudarStatus = (pedido, status) => loja.patch(`/api/pedidos/${pedido.id}`, { status });
 
 test('instalação nova: tudo desligado e os produtos sem variações, adicionais ou estoque', async () => {
@@ -149,14 +149,14 @@ test('variação e adicionais juntos; o cliente e a loja veem o que foi escolhid
   const r = await pedir([{ produtoId: p.id, quantidade: 2, variacaoId: medio.id, adicionaisIds: [recheio.id] }]);
   assert.equal(r.dados.total, (1800 + 500) * 2);
 
-  const [meu] = (await cliente.get('/api/conta/pedidos')).dados;
+  const [meu] = (await cliente.get('/api/conta/pedidos')).dados.itens;
   assert.deepEqual([meu.itens[0].variacao, meu.itens[0].adicionais], ['Médio', [{ nome: 'Recheio extra', preco: 500 }]]);
-  const pessoa = (await loja.get('/api/clientes')).dados.find((c) => c.nome === dados.nome);
+  const pessoa = (await loja.get('/api/clientes')).dados.itens.find((c) => c.nome === dados.nome);
   assert.equal(pessoa.pedidos[0].itens, `2× ${p.nome} (Médio) + Recheio extra`);
 
   // Mudar ou apagar a variação depois não altera o pedido já feito.
   await editar(p, { variacoes: [{ nome: 'Único', preco: 9900 }], adicionais: [] });
-  const [mesmo] = (await cliente.get('/api/conta/pedidos')).dados;
+  const [mesmo] = (await cliente.get('/api/conta/pedidos')).dados.itens;
   assert.deepEqual([mesmo.itens[0].variacao, mesmo.itens[0].precoUnit, mesmo.total], ['Médio', 2300, 4600]);
 });
 
@@ -254,7 +254,7 @@ test('estoque: cancelar devolve; reabrir tira de novo, e é recusado se não hou
   assert.equal(recusado.status, 409);
   assert.match(recusado.dados.erro, /só restam 1/);
   assert.equal((await ver(p)).estoque, 1);
-  assert.equal((await loja.get('/api/pedidos')).dados.find((x) => x.id === pedido.id).status, 'cancelado');
+  assert.equal((await loja.get('/api/pedidos')).dados.itens.find((x) => x.id === pedido.id).status, 'cancelado');
 
   // A loja repõe o estoque e então consegue reabrir.
   await editar(p, { estoque: 5 });
@@ -325,6 +325,6 @@ test('excluir o produto leva junto as variações e os adicionais; os pedidos an
   assert.equal((await visitante.get(`/api/produtos/${p.slug}`)).status, 404);
   assert.equal(await quantosPedidos(), quantos);
   // Cancelar um pedido de produto que não existe mais não quebra.
-  const antigo = (await loja.get('/api/pedidos')).dados.find((x) => x.itens.some((i) => i.produtoId === p.id));
+  const antigo = (await loja.get('/api/pedidos')).dados.itens.find((x) => x.itens.some((i) => i.produtoId === p.id));
   assert.equal((await mudarStatus(antigo, 'cancelado')).status, 200);
 });

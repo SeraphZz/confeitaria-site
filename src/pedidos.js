@@ -174,4 +174,4 @@ function montarDashboard(dias) {
   };
 }
 
-module.exports = { STATUS, criarPedido, mudarStatus, montarClientes, montarDashboard };
+module.exports = { STATUS, STATUS_ABERTOS, criarPedido, mudarStatus, montarClientes, montarDashboard };

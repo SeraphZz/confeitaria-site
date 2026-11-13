@@ -44,7 +44,7 @@ test('pedido válido recebe número e total calculado pelo servidor', async () =
   assert.equal(r.dados.numero, 1);
   assert.equal(r.dados.total, produtos[0].preco * 2 + produtos[1].preco);
 
-  const [pedido] = (await loja.get('/api/pedidos')).dados;
+  const [pedido] = (await loja.get('/api/pedidos')).dados.itens;
   assert.equal(pedido.numero, 1);
   assert.equal(pedido.status, 'novo');
   assert.equal(pedido.cliente.nome, dados.nome);
@@ -63,7 +63,7 @@ test('pedido com entrega exige endereço, grava-o formatado e guarda no cadastro
   const r = await cliente.post('/api/pedidos', corpoPedido({ entrega: { tipo: 'entrega', data: hojeLocal(2), endereco: ENDERECO } }));
   assert.equal(r.status, 200);
   assert.equal(r.dados.numero, 2);
-  const pedido = (await loja.get('/api/pedidos')).dados.find((p) => p.numero === 2);
+  const pedido = (await loja.get('/api/pedidos')).dados.itens.find((p) => p.numero === 2);
   assert.equal(pedido.entrega.endereco, 'Praça da Sé, 10 - apto 2 - Sé, São Paulo/SP - CEP 01001-000');
   assert.equal((await cliente.get('/api/site')).dados.cliente.endereco.cep, '01001000');
 });
@@ -84,7 +84,7 @@ test('pedidos inválidos são recusados', async () => {
   for (const [corpo, esperado] of casos) {
     assert.equal((await cliente.post('/api/pedidos', corpo)).status, esperado, JSON.stringify(corpo).slice(0, 160));
   }
-  assert.equal((await loja.get('/api/pedidos')).dados.length, 2, 'nenhum pedido inválido deveria ter sido gravado');
+  assert.equal((await loja.get('/api/pedidos')).dados.itens.length, 2, 'nenhum pedido inválido deveria ter sido gravado');
 });
 
 test('produto indisponível não pode ser pedido', async () => {
@@ -97,20 +97,20 @@ test('produto indisponível não pode ser pedido', async () => {
 test('cliente vê só os próprios pedidos, sem dados internos', async () => {
   const outro = servidor.navegador();
   await outro.post('/api/cadastro', dadosCliente());
-  assert.deepEqual((await outro.get('/api/conta/pedidos')).dados, []);
+  assert.deepEqual((await outro.get('/api/conta/pedidos')).dados.itens, []);
 
-  const meus = (await cliente.get('/api/conta/pedidos')).dados;
+  const meus = (await cliente.get('/api/conta/pedidos')).dados.itens;
   assert.deepEqual(meus.map((p) => p.numero), [2, 1]);
   assert.deepEqual(Object.keys(meus[0]).sort(), ['criadoEm', 'entrega', 'itens', 'numero', 'status', 'total']);
 });
 
 test('painel: a loja lista os pedidos do mais novo para o mais antigo', async () => {
-  const lista = (await loja.get('/api/pedidos')).dados;
+  const lista = (await loja.get('/api/pedidos')).dados.itens;
   assert.deepEqual(lista.map((p) => p.numero), [2, 1]);
 });
 
 test('mudança de status: só a loja, só status conhecidos', async () => {
-  const [pedido] = (await loja.get('/api/pedidos')).dados.filter((p) => p.numero === 1);
+  const [pedido] = (await loja.get('/api/pedidos')).dados.itens.filter((p) => p.numero === 1);
   assert.equal((await cliente.patch(`/api/pedidos/${pedido.id}`, { status: 'confirmado' })).status, 401);
   assert.equal((await servidor.navegador().patch(`/api/pedidos/${pedido.id}`, { status: 'confirmado' })).status, 401);
   assert.equal((await loja.patch(`/api/pedidos/${pedido.id}`, { status: 'inventado' })).status, 400);
@@ -122,7 +122,7 @@ test('mudança de status: só a loja, só status conhecidos', async () => {
     assert.equal(r.dados.status, status);
     assert.equal(r.dados.numero, 1);
   }
-  assert.equal((await cliente.get('/api/conta/pedidos')).dados.find((p) => p.numero === 1).status, 'entregue');
+  assert.equal((await cliente.get('/api/conta/pedidos')).dados.itens.find((p) => p.numero === 1).status, 'entregue');
 });
 
 test('pedido guarda nome e preço da época, mesmo que o produto mude ou seja apagado', async () => {
@@ -131,14 +131,14 @@ test('pedido guarda nome e preço da época, mesmo que o produto mude ou seja ap
   assert.equal(r.dados.total, 2100);
   await loja.put(`/api/produtos/${novo.id}`, { preco: 9900, nome: 'Outro Nome' });
   await loja.delete(`/api/produtos/${novo.id}`);
-  const pedido = (await loja.get('/api/pedidos')).dados.find((p) => p.numero === r.dados.numero);
+  const pedido = (await loja.get('/api/pedidos')).dados.itens.find((p) => p.numero === r.dados.numero);
   assert.equal(pedido.total, 2100);
   assert.deepEqual([pedido.itens[0].nome, pedido.itens[0].precoUnit], ['Doce Passageiro', 700]);
 });
 
 test('aba Clientes agrupa pedidos por pessoa e ignora cancelados no total', async () => {
-  const lista = (await loja.get('/api/pedidos')).dados;
-  const antes = (await loja.get('/api/clientes')).dados.find((p) => p.email === dados.email);
+  const lista = (await loja.get('/api/pedidos')).dados.itens;
+  const antes = (await loja.get('/api/clientes')).dados.itens.find((p) => p.email === dados.email);
   assert.equal(antes.cadastrado, true);
   assert.equal(antes.quantidade, 3);
   assert.equal(antes.total, lista.reduce((s, p) => s + p.total, 0));
@@ -147,14 +147,14 @@ test('aba Clientes agrupa pedidos por pessoa e ignora cancelados no total', asyn
 
   const cancelar = lista.find((p) => p.numero === 2);
   await loja.patch(`/api/pedidos/${cancelar.id}`, { status: 'cancelado' });
-  const depois = (await loja.get('/api/clientes')).dados.find((p) => p.email === dados.email);
+  const depois = (await loja.get('/api/clientes')).dados.itens.find((p) => p.email === dados.email);
   assert.equal(depois.quantidade, 2);
   assert.equal(depois.total, antes.total - cancelar.total);
   assert.equal(depois.pedidos.length, 3);
 });
 
 test('resumo: receita, pedidos e status do período', async () => {
-  const lista = (await loja.get('/api/pedidos')).dados;
+  const lista = (await loja.get('/api/pedidos')).dados.itens;
   const validos = lista.filter((p) => p.status !== 'cancelado');
   const r = (await loja.get('/api/dashboard?dias=7')).dados;
   assert.equal(r.dias, 7);

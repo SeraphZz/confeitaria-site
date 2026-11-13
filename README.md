@@ -12,7 +12,7 @@ node server.js
 
 Abra http://localhost:3000. Na primeira execução o terminal mostra o usuário (`confeiteira`) e uma **senha inicial aleatória** — entre em `/login` e troque em Painel > Configurações.
 
-Variáveis opcionais: `PORT` (porta), `ADMIN_PASSWORD` (define a senha inicial em vez de sortear), `DATA_DIR` (pasta dos dados), `NODE_ENV=production` (cookie de sessão só por HTTPS).
+Variáveis opcionais: `PORT` (porta), `ADMIN_PASSWORD` (define a senha inicial em vez de sortear), `DATA_DIR` (pasta dos dados), `NODE_ENV=production` (cookie de sessão só por HTTPS e cabeçalho HSTS), `BACKUP_MANTER` (quantas cópias de segurança guardar).
 
 **Perdeu a senha de acesso ao painel?** Rode `node scripts/senha-admin.js` (sorteia e mostra uma senha nova) ou `node scripts/senha-admin.js "MinhaSenha123"` (define a que você quiser). Funciona com o servidor ligado.
 
@@ -22,8 +22,9 @@ Para ver o painel com dados de exemplo: rode `node scripts/demo.js`. `node scrip
 
 Os dados ficam em um banco SQLite, o arquivo `data/loja.db`. As fotos ficam em `data/uploads/`.
 
-- **Backup:** `node scripts/backup.js` grava uma cópia em `data/backups/` (ou na pasta que você passar: `node scripts/backup.js D:copias`). Pode rodar com o site no ar. Copie também a pasta `data/uploads/` e guarde as cópias fora do servidor.
-- **Restaurar:** pare o servidor, troque `data/loja.db` pela cópia e suba de novo.
+- **Backup:** `node scripts/backup.js` grava uma cópia completa em `data/backups/loja-AAAA-MM-DD-HHMMSS/`: o banco (`loja.db`) e as fotos (`uploads/`). Pode rodar com o site no ar. Para gravar em outro lugar, passe a pasta: `node scripts/backup.js D:\copias`. Guarde cópias fora do servidor.
+- **Rotação:** o script guarda as 14 cópias mais recentes e apaga as mais antigas. Para mudar: `node scripts/backup.js --manter 30` (ou a variável `BACKUP_MANTER`); `--manter 0` nunca apaga. Só são apagadas as cópias criadas pelo próprio script; as cópias `antes-da-migracao-...` que o servidor faz ao atualizar o banco ficam onde estão.
+- **Restaurar:** pare o servidor, copie o `loja.db` e a pasta `uploads/` da cópia para dentro de `data/` e suba de novo.
 - **Vinha da versão com `db.json`?** Não precisa fazer nada: na primeira execução o servidor copia tudo para o `loja.db` e renomeia o arquivo antigo para `db.json.migrado`, que fica guardado.
 
 ## O que a loja consegue fazer logada
@@ -166,6 +167,14 @@ A estrutura das tabelas fica em `migracoes/`, um arquivo numerado por mudança (
 - Cada migração vale por inteiro ou não vale: se falhar, é desfeita, o banco fica como estava e o servidor não sobe (a mensagem diz qual migração falhou).
 - Se o banco for mais novo que o programa (alguém voltou o código para uma versão antiga), o servidor se recusa a subir em vez de arriscar os dados.
 - Para criar uma migração, adicione um arquivo com o próximo número, no formato de `migracoes/001-esquema-inicial.js`. Nunca edite uma migração já publicada.
+
+## Segurança
+
+- **Pedidos vindos de outro site são recusados.** Tudo o que altera dados (login, pedido, cadastro, painel) só é aceito se saiu de uma página do próprio site: o servidor confere o cabeçalho `Origin` (ou `Sec-Fetch-Site`) contra o endereço pelo qual o pedido chegou e contra o `SITE_URL`. Isso impede que uma página qualquer, aberta no navegador de quem está logado, aja em nome dessa pessoa. Atrás de um proxy que troque o cabeçalho `Host`, configure o `SITE_URL` com o endereço público.
+- **HTTPS obrigatório em produção.** Com `NODE_ENV=production`, todas as respostas levam `Strict-Transport-Security` (um ano): depois da primeira visita, o navegador só acessa o site por HTTPS.
+- **Limite de tentativas por IP e por conta.** Além do limite por IP, cada conta (clientes e painel) aceita 10 erros de senha em 15 minutos, somando todos os IPs; depois disso fica bloqueada por 15 minutos, mesmo para a senha certa. Acertar a senha zera a contagem. A contagem fica em memória: reiniciar o servidor libera na hora.
+- **Listas paginadas.** Pedidos e clientes do painel vêm 30 por vez, e o histórico do cliente, 20 por vez ("Carregar mais"). O filtro de status e a busca de clientes são feitos no servidor.
+- Senhas com hash e sal, sessão em cookie `HttpOnly` e `SameSite=Lax`, política de conteúdo (CSP) sem scripts de fora, e preços sempre calculados no servidor.
 
 ## Limites conhecidos (de propósito, para manter simples)
 
