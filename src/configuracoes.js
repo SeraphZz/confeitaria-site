@@ -69,6 +69,15 @@ const SECOES = {
     }),
   },
 
+  // Recursos opcionais do catálogo: cada loja liga só o que usa (as regras estão em src/catalogo.js).
+  // Desligado é o padrão, então uma instalação que já existia continua exatamente como estava.
+  modulos: {
+    publica: true,
+    editavel: true,
+    padrao: { variacoes: false, adicionais: false, estoque: false },
+    validar: (corpo) => ({ variacoes: corpo.variacoes === true, adicionais: corpo.adicionais === true, estoque: corpo.estoque === true }),
+  },
+
   // Aparência da loja. Vira CSS em src/tema.js (servido em /tema.css). Cor vazia = usar a cor padrão do sistema.
   // Não é editável pela rota genérica: as alterações passam pelo rascunho e só valem depois de publicadas
   // (ver src/aparencia.js).

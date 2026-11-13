@@ -8,9 +8,15 @@ App.pronto.then(async ({ loja, admin, cliente, catalogo, atendimento }) => {
   document.title = `Carrinho · ${loja.nome}`;
 
   const produtos = new Map((await api('/api/produtos')).map((p) => [p.id, p]));
-  // Tira do carrinho o que deixou de existir ou ficou indisponível.
-  const validos = carrinho.itens().filter((i) => produtos.has(i.produtoId));
-  if (validos.length !== carrinho.itens().length) carrinho.salvar(validos);
+  // Variação, adicionais e preço de uma unidade de um item, conforme o produto está agora (null = escolha que não existe mais).
+  const escolhas = (item) => App.escolhasDoItem(produtos.get(item.produtoId), item);
+  // Tira do carrinho o que deixou de existir, ficou indisponível ou teve as opções alteradas pela loja.
+  const validos = carrinho.itens().filter((i) => produtos.has(i.produtoId) && escolhas(i));
+  const retirados = carrinho.itens().length - validos.length;
+  if (retirados) {
+    carrinho.salvar(validos);
+    aviso(retirados === 1 ? 'Um item saiu do carrinho porque não está mais disponível.' : `${retirados} itens saíram do carrinho porque não estão mais disponíveis.`);
+  }
 
   const hoje = new Date();
   const hojeIso = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
@@ -45,7 +51,7 @@ App.pronto.then(async ({ loja, admin, cliente, catalogo, atendimento }) => {
     </div>`;
 
   function total(itens) {
-    return itens.reduce((s, i) => s + produtos.get(i.produtoId).preco * i.quantidade, 0);
+    return itens.reduce((s, i) => s + escolhas(i).precoUnit * i.quantidade, 0);
   }
 
   function desenhar() {
@@ -59,16 +65,19 @@ App.pronto.then(async ({ loja, admin, cliente, catalogo, atendimento }) => {
         <div class="col-12 lg:col-7">
           ${itens.map((item, i) => {
             const d = produtos.get(item.produtoId);
+            const { variacao, adicionais, precoUnit } = escolhas(item);
             return `
             <div class="item-carrinho">
               ${fotoHtml(d)}
               <div>
                 <a class="fw-semibold" href="/produto/${esc(d.slug)}">${esc(d.nome)}</a>
-                <div class="suave fs-sm">${brl(d.preco)} / ${esc(d.unidade)}</div>
+                ${variacao ? `<div class="fs-sm">${esc(variacao.nome)}</div>` : ''}
+                ${adicionais.length ? `<div class="fs-sm">+ ${esc(adicionais.map((a) => a.nome).join(', '))}</div>` : ''}
+                <div class="suave fs-sm">${brl(precoUnit)} / ${esc(d.unidade)}</div>
                 ${item.observacoes ? `<div class="fs-sm mt-1"><strong>Alterações:</strong> ${esc(item.observacoes)}</div>` : ''}
               </div>
               <div class="lado">
-                <strong>${brl(d.preco * item.quantidade)}</strong>
+                <strong>${brl(precoUnit * item.quantidade)}</strong>
                 <div class="qtd">
                   <button type="button" data-i="${i}" data-passo="-1" aria-label="Diminuir">−</button>
                   <input type="number" min="1" max="999" value="${item.quantidade}" data-i="${i}" aria-label="Quantidade de ${esc(d.nome)}">

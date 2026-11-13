@@ -45,7 +45,7 @@ App.pronto.then(async ({ loja, admin, cliente, catalogo }) => {
                 <div class="suave fs-sm">feito em ${dataBr(p.criadoEm)} · ${p.entrega.tipo === 'entrega' ? 'entrega' : 'retirada'} em ${dataBr(p.entrega.data)}</div></div>
               <strong>${brl(p.total)}</strong>
             </div>
-            <ul>${p.itens.map((i) => `<li>${i.quantidade}× ${esc(i.nome)}${i.observacoes ? ` <em>(${esc(i.observacoes)})</em>` : ''}</li>`).join('')}</ul>
+            <ul>${p.itens.map((i) => `<li>${i.quantidade}× ${esc(i.nome + App.opcoesTexto(i.variacao, i.adicionais))}${i.observacoes ? ` <em>(${esc(i.observacoes)})</em>` : ''}</li>`).join('')}</ul>
           </article>`).join('')
         : `<p class="suave">Você ainda não fez pedidos.</p><a class="btn btn-solid theme-primary" href="/">Escolher ${esc(App.minusculas(catalogo.nomePlural))}</a>`}
       </div>

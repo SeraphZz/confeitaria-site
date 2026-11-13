@@ -2,7 +2,7 @@
 // Página inicial: capa + grade de produtos.
 
 App.pronto.then(async ({ loja, admin, catalogo }) => {
-  const { esc, brl, fotoHtml, minusculas } = App;
+  const { esc, fotoHtml, minusculas } = App;
   document.title = loja.nome;
   document.getElementById('capa-titulo').textContent = loja.nome;
   document.getElementById('capa-slogan').textContent = loja.slogan;
@@ -21,13 +21,14 @@ App.pronto.then(async ({ loja, admin, catalogo }) => {
   }
   // `titulo`: h3 na lista única; h4 quando o cartão fica abaixo do título de uma categoria.
   const cartao = (p, titulo = 'h3') => `
-    <a class="produto-card${p.disponivel ? '' : ' indisponivel'}" href="/produto/${esc(p.slug)}">
+    <a class="produto-card${p.disponivel && !p.esgotado ? '' : ' indisponivel'}" href="/produto/${esc(p.slug)}">
       ${fotoHtml(p)}
       <div class="corpo">
         <${titulo} class="nome">${esc(p.nome)}</${titulo}>
         <span class="suave fs-sm">${esc(p.unidade)}</span>
         ${p.disponivel ? '' : '<span><span class="selo cinza">Oculto para clientes</span></span>'}
-        <span class="preco">${brl(p.preco)}</span>
+        ${p.esgotado ? '<span><span class="selo cinza">Esgotado</span></span>' : ''}
+        <span class="preco">${App.precoVitrine(p)}</span>
       </div>
     </a>`;
 

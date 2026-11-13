@@ -39,7 +39,7 @@ test('datas: o dia depende do fuso da loja, não do servidor', () => {
 
 test('visitante recebe só as seções públicas', async () => {
   const r = await visitante.get('/api/site');
-  assert.deepEqual(Object.keys(r.dados).sort(), ['admin', 'atendimento', 'catalogo', 'cliente', 'loja', 'previaTema', 'sobre', 'tema']);
+  assert.deepEqual(Object.keys(r.dados).sort(), ['admin', 'atendimento', 'catalogo', 'cliente', 'loja', 'modulos', 'previaTema', 'sobre', 'tema']);
   assert.doesNotMatch(r.texto, /hash|salt|usuario|fusoHorario/);
 });
 
@@ -48,7 +48,7 @@ test('painel lê as seções editáveis, e nunca a conta de acesso', async () =>
   assert.equal((await cliente.get('/api/configuracoes')).status, 401);
   const r = await loja.get('/api/configuracoes');
   assert.equal(r.status, 200);
-  assert.deepEqual(Object.keys(r.dados).sort(), ['atendimento', 'catalogo', 'loja', 'operacao', 'sobre']);
+  assert.deepEqual(Object.keys(r.dados).sort(), ['atendimento', 'catalogo', 'loja', 'modulos', 'operacao', 'sobre']);
   assert.deepEqual(r.dados.operacao, { fusoHorario: 'America/Sao_Paulo' }); // padrão, sem nada gravado no banco
   assert.doesNotMatch(r.texto, /hash|salt|confeiteira"/);
 });

@@ -9,6 +9,7 @@ const { ehAdmin } = require('../sessao');
 const { salvarImagem, removerImagem, LIMITE_JSON_COM_FOTO } = require('../imagens');
 const { criarSlug } = require('../primeiro-uso');
 const configuracoes = require('../configuracoes');
+const { modulos, paraVitrine, aplicarOpcionais } = require('../catalogo');
 
 function acharProduto(id) {
   const produto = banco.produtoPorId(id);
@@ -32,6 +33,7 @@ function aplicarCampos(produto, corpo) {
     if (id !== null && (typeof id !== 'string' || !banco.categoriaPorId(id))) throw new ErroHttp(400, 'Categoria não encontrada. Recarregue a página.');
     produto.categoriaId = id;
   }
+  aplicarOpcionais(produto, corpo); // estoque, variações e adicionais (src/catalogo.js)
 }
 
 const MAX_CATEGORIAS = 50;
@@ -86,21 +88,26 @@ module.exports = [
   }, true],
 
   // ---- produtos
-  ['GET', /^\/api\/produtos$/, (req) => banco.listarProdutos({ soDisponiveis: !ehAdmin(req) })],
+  // Tudo o que sai daqui passa por `paraVitrine`: variações, adicionais e estoque só aparecem com o recurso ligado.
+  ['GET', /^\/api\/produtos$/, (req) => {
+    const ligados = modulos();
+    return banco.listarProdutos({ soDisponiveis: !ehAdmin(req) }).map((produto) => paraVitrine(produto, ligados));
+  }],
 
   ['GET', /^\/api\/produtos\/([a-z0-9-]+)$/, (req, [slug]) => {
     const produto = banco.produtoPorSlug(slug);
     if (!produto || (!produto.disponivel && !ehAdmin(req))) throw new ErroHttp(404, 'Produto não encontrado.');
-    return produto;
+    return paraVitrine(produto);
   }],
 
   ['POST', /^\/api\/produtos$/, async (req) => {
     const corpo = await lerJson(req);
-    const produto = { id: crypto.randomUUID(), slug: '', nome: '', descricao: '', preco: 0, unidade: 'unidade', emoji: emojiPadrao(), imagem: '', disponivel: true, categoriaId: null };
+    const produto = { id: crypto.randomUUID(), slug: '', nome: '', descricao: '', preco: 0, unidade: 'unidade', emoji: emojiPadrao(), imagem: '', disponivel: true, categoriaId: null,
+      estoque: null, variacoes: [], adicionais: [] };
     aplicarCampos(produto, { nome: '', ...corpo });
     produto.slug = criarSlug(produto.nome, banco.listarProdutos().map((p) => p.slug));
     banco.salvarProduto(produto);
-    return produto;
+    return paraVitrine(produto);
   }, true],
 
   ['PUT', /^\/api\/produtos\/([0-9a-f-]{36})$/, async (req, [id]) => {
@@ -109,7 +116,7 @@ module.exports = [
     const produto = acharProduto(id);
     aplicarCampos(produto, corpo);
     banco.salvarProduto(produto);
-    return produto;
+    return paraVitrine(produto);
   }, true],
 
   ['DELETE', /^\/api\/produtos\/([0-9a-f-]{36})$/, (req, [id]) => {
@@ -124,6 +131,6 @@ module.exports = [
     const produto = acharProduto(id);
     if (imagem) salvarImagem(produto, imagem); else removerImagem(produto);
     banco.salvarProduto(produto);
-    return produto;
+    return paraVitrine(produto);
   }, true],
 ];

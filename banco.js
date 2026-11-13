@@ -91,22 +91,95 @@ function apagarCategoria(id) {
 const paraProduto = (l) => l && {
   id: l.id, slug: l.slug, nome: l.nome, descricao: l.descricao, preco: l.preco,
   unidade: l.unidade, emoji: l.emoji, imagem: l.imagem, disponivel: Boolean(l.disponivel), categoriaId: l.categoria_id,
+  estoque: l.estoque, // null = a loja não controla o estoque deste produto
 };
+const paraVariacao = (l) => ({ id: l.id, nome: l.nome, preco: l.preco, estoque: l.estoque });
+const paraAdicional = (l) => ({ id: l.id, nome: l.nome, preco: l.preco });
+
+// Junta a cada produto as variações e os adicionais dele, na ordem definida pela loja.
+// Aqui vem tudo o que está gravado; o que aparece conforme os recursos ligados é decidido em src/catalogo.js.
+function comOpcoes(produtos) {
+  if (!produtos.length) return produtos;
+  // Um produto só: busca as opções dele. Vários: uma consulta por tabela, em vez de uma por produto.
+  const filtro = produtos.length === 1 ? 'WHERE produto_id = ?' : '';
+  const parametros = produtos.length === 1 ? [produtos[0].id] : [];
+  const agrupar = (tabela, converter) => {
+    const grupos = new Map();
+    for (const l of sql(`SELECT * FROM ${tabela} ${filtro} ORDER BY ordem`).all(...parametros)) {
+      if (!grupos.has(l.produto_id)) grupos.set(l.produto_id, []);
+      grupos.get(l.produto_id).push(converter(l));
+    }
+    return grupos;
+  };
+  const variacoes = agrupar('produto_variacoes', paraVariacao);
+  const adicionais = agrupar('produto_adicionais', paraAdicional);
+  return produtos.map((p) => ({ ...p, variacoes: variacoes.get(p.id) || [], adicionais: adicionais.get(p.id) || [] }));
+}
+const umProduto = (linha) => (linha ? comOpcoes([paraProduto(linha)])[0] : undefined);
 
 function listarProdutos({ soDisponiveis = false } = {}) {
-  return sql(`SELECT * FROM produtos ${soDisponiveis ? 'WHERE disponivel = 1' : ''} ORDER BY rowid`).all().map(paraProduto);
+  return comOpcoes(sql(`SELECT * FROM produtos ${soDisponiveis ? 'WHERE disponivel = 1' : ''} ORDER BY rowid`).all().map(paraProduto));
 }
-const produtoPorId = (id) => paraProduto(sql('SELECT * FROM produtos WHERE id = ?').get(String(id)));
-const produtoPorSlug = (slug) => paraProduto(sql('SELECT * FROM produtos WHERE slug = ?').get(String(slug)));
+const produtoPorId = (id) => umProduto(sql('SELECT * FROM produtos WHERE id = ?').get(String(id)));
+const produtoPorSlug = (slug) => umProduto(sql('SELECT * FROM produtos WHERE slug = ?').get(String(slug)));
 
-// Cria ou atualiza (pelo id).
+// Cria ou atualiza (pelo id), com as variações e os adicionais: os que não vierem na lista são apagados.
 function salvarProduto(d) {
-  sql(`INSERT INTO produtos (id, slug, nome, descricao, preco, unidade, emoji, imagem, disponivel, categoria_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (id) DO UPDATE SET slug = excluded.slug, nome = excluded.nome, descricao = excluded.descricao,
-         preco = excluded.preco, unidade = excluded.unidade, emoji = excluded.emoji, imagem = excluded.imagem,
-         disponivel = excluded.disponivel, categoria_id = excluded.categoria_id`)
-    .run(d.id, d.slug, d.nome, d.descricao, d.preco, d.unidade, d.emoji, d.imagem, d.disponivel ? 1 : 0, d.categoriaId || null);
+  transacao(() => {
+    sql(`INSERT INTO produtos (id, slug, nome, descricao, preco, unidade, emoji, imagem, disponivel, categoria_id, estoque)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET slug = excluded.slug, nome = excluded.nome, descricao = excluded.descricao,
+           preco = excluded.preco, unidade = excluded.unidade, emoji = excluded.emoji, imagem = excluded.imagem,
+           disponivel = excluded.disponivel, categoria_id = excluded.categoria_id, estoque = excluded.estoque`)
+      .run(d.id, d.slug, d.nome, d.descricao, d.preco, d.unidade, d.emoji, d.imagem, d.disponivel ? 1 : 0, d.categoriaId || null, d.estoque ?? null);
+
+    const variacoes = d.variacoes || [];
+    const adicionais = d.adicionais || [];
+    apagarOpcoesForaDaLista('produto_variacoes', d.id, variacoes);
+    apagarOpcoesForaDaLista('produto_adicionais', d.id, adicionais);
+    variacoes.forEach((v, ordem) => {
+      sql(`INSERT INTO produto_variacoes (id, produto_id, nome, preco, estoque, ordem) VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET nome = excluded.nome, preco = excluded.preco, estoque = excluded.estoque, ordem = excluded.ordem`)
+        .run(v.id, d.id, v.nome, v.preco, v.estoque ?? null, ordem);
+    });
+    adicionais.forEach((a, ordem) => {
+      sql(`INSERT INTO produto_adicionais (id, produto_id, nome, preco, ordem) VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET nome = excluded.nome, preco = excluded.preco, ordem = excluded.ordem`)
+        .run(a.id, d.id, a.nome, a.preco, ordem);
+    });
+  });
+}
+
+function apagarOpcoesForaDaLista(tabela, produtoId, lista) {
+  const manter = new Set(lista.map((o) => o.id));
+  for (const { id } of sql(`SELECT id FROM ${tabela} WHERE produto_id = ?`).all(produtoId)) {
+    if (!manter.has(id)) sql(`DELETE FROM ${tabela} WHERE id = ?`).run(id);
+  }
+}
+
+// ---- estoque
+// O estoque de um item de pedido fica na variação escolhida, quando há uma; senão, no produto.
+const ondeFicaOEstoque = (item) => (item.variacaoId ? ['produto_variacoes', item.variacaoId] : ['produtos', item.produtoId]);
+
+// Tira a quantidade do item do estoque, só se houver o bastante (a conferência e a baixa são um comando só).
+// Devolve { baixou: true }, ou { baixou: false, restam }: `restam` é quanto há, ou null se o estoque não é controlado.
+function baixarEstoque(item) {
+  const [tabela, id] = ondeFicaOEstoque(item);
+  const { changes } = sql(`UPDATE ${tabela} SET estoque = estoque - ? WHERE id = ? AND estoque >= ?`).run(item.quantidade, id, item.quantidade);
+  if (Number(changes) > 0) return { baixou: true };
+  const linha = sql(`SELECT estoque FROM ${tabela} WHERE id = ?`).get(id);
+  return { baixou: false, restam: linha ? linha.estoque : null };
+}
+
+// Devolve a quantidade do item ao estoque (pedido cancelado). Não faz nada se o estoque deixou de ser controlado.
+function devolverEstoque(item) {
+  const [tabela, id] = ondeFicaOEstoque(item);
+  sql(`UPDATE ${tabela} SET estoque = estoque + ? WHERE id = ? AND estoque IS NOT NULL`).run(item.quantidade, id);
+}
+
+// Situação do estoque nos itens de um pedido: 1 = saiu do estoque, 2 = voltou (ver migração 004).
+function trocarSituacaoEstoque(pedidoNumero, de, para) {
+  sql('UPDATE pedido_itens SET estoque_situacao = ? WHERE pedido_numero = ? AND estoque_situacao = ?').run(para, pedidoNumero, de);
 }
 
 function apagarProduto(id) {
@@ -151,8 +224,10 @@ function inserirPedido(p) {
         p.entrega.tipo, p.entrega.data, p.entrega.endereco || '', p.observacoes || '', p.total, p.status, p.demo ? 1 : 0);
     const numero = Number(lastInsertRowid);
     for (const i of p.itens) {
-      sql('INSERT INTO pedido_itens (pedido_numero, produto_id, nome, preco_unit, quantidade, observacoes) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(numero, i.produtoId || null, i.nome, i.precoUnit, i.quantidade, i.observacoes || '');
+      sql(`INSERT INTO pedido_itens (pedido_numero, produto_id, nome, preco_unit, quantidade, observacoes,
+             variacao_id, variacao, adicionais, estoque_situacao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(numero, i.produtoId || null, i.nome, i.precoUnit, i.quantidade, i.observacoes || '',
+          i.variacaoId || null, i.variacao || '', JSON.stringify(i.adicionais || []), i.estoqueSituacao || 0);
     }
     return numero;
   });
@@ -164,7 +239,10 @@ function buscarPedidos(filtro = '', parametros = []) {
   const linhasItens = sql(`SELECT i.* FROM pedido_itens i JOIN pedidos p ON p.numero = i.pedido_numero ${filtro} ORDER BY i.rowid`).all(...parametros);
   for (const i of linhasItens) {
     if (!itens.has(i.pedido_numero)) itens.set(i.pedido_numero, []);
-    itens.get(i.pedido_numero).push({ produtoId: i.produto_id, nome: i.nome, precoUnit: i.preco_unit, quantidade: i.quantidade, observacoes: i.observacoes });
+    itens.get(i.pedido_numero).push({
+      produtoId: i.produto_id, nome: i.nome, precoUnit: i.preco_unit, quantidade: i.quantidade, observacoes: i.observacoes,
+      variacaoId: i.variacao_id, variacao: i.variacao, adicionais: JSON.parse(i.adicionais), estoqueSituacao: i.estoque_situacao,
+    });
   }
   return sql(`SELECT p.* FROM pedidos p ${filtro} ORDER BY p.criado_em, p.numero`).all(...parametros).map((p) => ({
     id: p.id, numero: p.numero, criadoEm: p.criado_em, clienteId: p.cliente_id,
@@ -235,6 +313,7 @@ module.exports = {
   DATA_DIR, ARQUIVO, transacao, lerConfig, gravarConfig, apagarConfig,
   listarCategorias, categoriaPorId, salvarCategoria, ordenarCategorias, apagarCategoria,
   listarProdutos, produtoPorId, produtoPorSlug, salvarProduto, apagarProduto,
+  baixarEstoque, devolverEstoque, trocarSituacaoEstoque,
   listarClientes, clientePorId, clientePorEmail, salvarCliente,
   inserirPedido, listarPedidos, pedidoPorId, mudarStatusPedido, contarPedidosComStatus, apagarPedidosDemo,
 };

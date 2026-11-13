@@ -31,6 +31,7 @@ Os dados ficam em um banco SQLite, o arquivo `data/loja.db`. As fotos ficam em `
 - **Editar um produto na própria página dele** (botão "Editar"): nome, preço, descrição, foto, categoria, disponibilidade.
 - Criar, ocultar e excluir produtos no Painel, na aba que leva o nome escolhido pela loja (Doces, Pratos, Produtos...).
 - Organizar os produtos em categorias (Bolos, Bebidas...), na mesma aba: criar, renomear, ordenar e excluir. Com categorias, a página inicial separa os produtos em grupos, na ordem escolhida, com botões para filtrar; sem nenhuma, fica uma lista só. Excluir uma categoria não apaga os produtos dela.
+- Ligar recursos opcionais em Configurações: **variações** (o mesmo produto em opções com preço próprio), **adicionais** (extras somados ao preço) e **estoque** (ver abaixo).
 - Editar a página Sobre (história e trajetória) no próprio lugar.
 - Ver os pedidos por pessoa em Painel > Clientes (total gasto, quantidade e histórico de cada cliente).
 - Acompanhar pedidos e mudar o status (Novo → Confirmado → Em produção → Pronto → Entregue / Cancelado).
@@ -82,6 +83,7 @@ src/configuracoes.js  configurações da loja: padrões, validação e o que é 
 src/tema.js      transforma as escolhas de aparência no CSS servido em /tema.css
 src/aparencia.js rascunho, publicação e descarte do tema
 src/atendimento.js  horários de funcionamento e formas de receber o pedido
+src/catalogo.js  recursos opcionais do catálogo: variações, adicionais e estoque
 src/*.js         sessão, senhas, validação, datas, regras de pedidos, imagens e arquivos estáticos
 banco.js         camada de dados (SQLite): todas as consultas
 migracoes/       estrutura das tabelas, em arquivos numerados (ver abaixo)
@@ -108,6 +110,7 @@ Tudo o que é próprio de um estabelecimento fica no banco (tabela `config`) e p
 | `tema` | cores, letra dos títulos, logotipo, ícone da aba e banner (versão publicada) | qualquer visitante |
 | `temaRascunho` | alterações de aparência ainda não publicadas | só o painel |
 | `atendimento` | horários de funcionamento e formas de receber o pedido (retirada, entrega) | qualquer visitante |
+| `modulos` | recursos opcionais ligados: variações, adicionais, estoque | qualquer visitante |
 | `operacao` | fuso horário da loja | só o painel |
 | `admin` | conta de acesso ao painel | ninguém (nunca sai do servidor) |
 
@@ -129,6 +132,15 @@ O painel lê as seções editáveis em `GET /api/configuracoes` e grava uma seç
 - **Como o cliente recebe o pedido:** a loja liga ou desliga retirada e entrega (ao menos uma fica ligada) e escreve as informações de cada uma, além do texto da taxa de entrega. O carrinho só oferece o que está ligado, e o servidor recusa pedido em uma forma desligada.
 - **Endereço da loja:** opcional; quando preenchido, aparece no rodapé.
 - As regras ficam em `src/atendimento.js`.
+
+**Recursos opcionais (Painel > Configurações > Recursos opcionais).** Vêm desligados; cada loja liga só o que usa. Depois de ligar, os campos aparecem na tela de edição de cada produto.
+
+- **Variações:** o mesmo produto em opções com preço próprio (Pequeno, Médio, Grande). Produto com variações exige que o cliente escolha uma, e o preço dela vale no lugar do preço do produto; na vitrine aparece "a partir de". Até 20 por produto.
+- **Adicionais:** extras que o cliente pode marcar (calda, embalagem para presente), somados ao preço. Até 30 por produto.
+- **Estoque:** quantidade disponível de cada produto, ou de cada variação quando o produto tem variações. Vazio = sem controle. Cada pedido diminui o estoque; se não houver o bastante, o pedido inteiro é recusado e o cliente vê quanto resta. Em zero, o produto aparece como esgotado. Cancelar um pedido devolve a quantidade; reabrir um pedido cancelado tira de novo (e é recusado se não houver mais). Na aba de produtos dá para ajustar o estoque direto na lista.
+- O pedido guarda uma cópia do que foi escolhido (variação, adicionais e preço): mudar o produto depois não altera pedidos antigos.
+- Desligar um recurso esconde os dados dele e faz os pedidos novos ignorá-lo, mas nada é apagado: religar traz tudo de volta.
+- As regras ficam em `src/catalogo.js`; preços e nomes das escolhas saem sempre do banco, nunca do que o navegador envia.
 
 **Fuso horário.** A data mínima dos pedidos ("de hoje em diante") e os dias do resumo seguem o fuso da loja, não o do servidor. O padrão é `America/Sao_Paulo`. Para uma loja em outro fuso, escolha em Painel > Configurações > Horários de funcionamento (a lista traz os quatro fusos do Brasil).
 

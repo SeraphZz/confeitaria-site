@@ -4,7 +4,7 @@
 const banco = require('../../banco');
 const { ErroHttp, lerJson, ipDe, limitar } = require('../http');
 const { exigirCliente } = require('../sessao');
-const { STATUS, criarPedido, montarClientes, montarDashboard } = require('../pedidos');
+const { STATUS, criarPedido, mudarStatus, montarClientes, montarDashboard } = require('../pedidos');
 const configuracoes = require('../configuracoes');
 
 module.exports = [
@@ -20,13 +20,11 @@ module.exports = [
   ['GET', /^\/api\/clientes$/, () => montarClientes(), true],
 
   ['PATCH', /^\/api\/pedidos\/([0-9a-f-]{36})$/, async (req, [id]) => {
-    const pedido = banco.pedidoPorId(id);
-    if (!pedido) throw new ErroHttp(404, 'Pedido não encontrado.');
     const { status } = await lerJson(req);
     if (!STATUS.includes(status)) throw new ErroHttp(400, 'Status inválido.');
-    banco.mudarStatusPedido(id, status);
-    pedido.status = status;
-    return pedido;
+    const pedido = banco.pedidoPorId(id);
+    if (!pedido) throw new ErroHttp(404, 'Pedido não encontrado.');
+    return mudarStatus(pedido, status); // cancelar e reabrir acertam o estoque
   }, true],
 
   ['GET', /^\/api\/dashboard$/, (req, _p, _res, url) => {

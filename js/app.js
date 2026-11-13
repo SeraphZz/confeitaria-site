@@ -56,22 +56,59 @@ const App = (() => {
         const itens = JSON.parse(localStorage.getItem('carrinho') || '[]');
         if (!Array.isArray(itens)) return [];
         // Carrinhos guardados antes de "doce" virar "produto" usam o campo antigo `doceId`.
-        return itens.map(({ doceId, ...item }) => (item.produtoId ? item : { ...item, produtoId: doceId }));
+        // Todo item sai daqui com `variacaoId` ('' = nenhuma) e `adicionaisIds` (lista), mesmo os guardados antes
+        // de esses recursos existirem.
+        return itens.map(({ doceId, ...item }) => ({
+          ...item, produtoId: item.produtoId || doceId,
+          variacaoId: typeof item.variacaoId === 'string' ? item.variacaoId : '',
+          adicionaisIds: Array.isArray(item.adicionaisIds) ? item.adicionaisIds : [],
+        }));
       } catch { return []; }
     },
     salvar(itens) {
       localStorage.setItem('carrinho', JSON.stringify(itens));
       atualizarContador();
     },
-    adicionar(produtoId, quantidade, observacoes) {
+    // `variacaoId` e `adicionaisIds`: o que o cliente escolheu na página do produto (ver escolhasDoItem).
+    adicionar(produtoId, quantidade, observacoes, { variacaoId = '', adicionaisIds = [] } = {}) {
       const itens = this.itens();
-      const igual = itens.find((i) => i.produtoId === produtoId && i.observacoes === observacoes);
+      // Mesmo produto com as mesmas escolhas e o mesmo recado soma na linha que já existe.
+      const chave = (i) => JSON.stringify([i.produtoId, i.variacaoId, [...i.adicionaisIds].sort(), i.observacoes]);
+      const novo = { produtoId, quantidade, observacoes, variacaoId, adicionaisIds };
+      const igual = itens.find((i) => chave(i) === chave(novo));
       if (igual) igual.quantidade = Math.min(999, igual.quantidade + quantidade);
-      else itens.push({ produtoId, quantidade, observacoes });
+      else itens.push(novo);
       this.salvar(itens);
     },
     quantidadeTotal() { return this.itens().reduce((s, i) => s + i.quantidade, 0); },
   };
+
+  // ---- variações e adicionais (recursos opcionais: as listas vêm vazias quando a loja não usa)
+
+  // Confere as escolhas de um item do carrinho com o produto como ele está agora. Devolve a variação, os adicionais
+  // e o preço de uma unidade — ou null, se alguma escolha deixou de existir (o servidor faz a mesma conferência).
+  function escolhasDoItem(produto, item) {
+    const variacao = produto.variacoes.find((v) => v.id === item.variacaoId) || null;
+    if (produto.variacoes.length ? !variacao : item.variacaoId) return null;
+    const adicionais = produto.adicionais.filter((a) => item.adicionaisIds.includes(a.id));
+    if (adicionais.length !== new Set(item.adicionaisIds).size) return null;
+    return { variacao, adicionais, precoUnit: (variacao ? variacao.preco : produto.preco) + adicionais.reduce((s, a) => s + a.preco, 0) };
+  }
+
+  // Texto (ainda sem escapar) das escolhas de um item: " (Grande) + Calda, Granulado". Serve para o carrinho e para
+  // pedidos já feitos: `variacao` pode ser o nome ou o objeto; `adicionais`, objetos com `nome`.
+  function opcoesTexto(variacao, adicionais = []) {
+    const nome = variacao && typeof variacao === 'object' ? variacao.nome : variacao;
+    return (nome ? ` (${nome})` : '') + (adicionais.length ? ` + ${adicionais.map((a) => a.nome).join(', ')}` : '');
+  }
+
+  // Preço na vitrine. Produto com variações de preços diferentes mostra "a partir de".
+  function precoVitrine(produto) {
+    if (!produto.variacoes.length) return brl(produto.preco);
+    const precos = produto.variacoes.map((v) => v.preco);
+    const menor = Math.min(...precos);
+    return (menor === Math.max(...precos) ? '' : 'a partir de ') + brl(menor);
+  }
 
   function atualizarContador() {
     const el = document.getElementById('contador-carrinho');
@@ -302,7 +339,7 @@ const App = (() => {
   };
 
   return {
-    esc, brl, lerPreco, dataBr, api, aviso, carrinho, fotoHtml, reduzirImagem, sair, STATUS, pronto, minusculas, resumirHorarios,
+    esc, brl, lerPreco, dataBr, api, aviso, carrinho, escolhasDoItem, opcoesTexto, precoVitrine, fotoHtml, reduzirImagem, sair, STATUS, pronto, minusculas, resumirHorarios,
     formatarTelefone, linkWhats, enderecoHtml, lerEndereco, ligarMascaras,
   };
 })();

@@ -128,6 +128,14 @@ a.marca, a.marca:hover, div.marca { color: var(--texto-na-faixa); }
 .qtd button:hover { background: var(--marca); }
 .qtd input { width: 3rem; text-align: center; border: 0; background: none; font-weight: 600; color: var(--tinta); -moz-appearance: textfield; }
 .qtd input::-webkit-outer-spin-button, .qtd input::-webkit-inner-spin-button { -webkit-appearance: none; }
+/* Variações e adicionais: o cliente escolhe (.opcao); a loja cadastra (.linha-opcao) */
+.opcao { display: flex; align-items: baseline; gap: .5rem; padding: .4rem 0; border-bottom: 1px solid var(--marca); cursor: pointer; }
+.opcao:last-child { border-bottom: 0; }
+.opcao .valor { margin-left: auto; font-weight: 600; white-space: nowrap; }
+.opcao:has(input:disabled) { cursor: default; color: var(--tinta-suave); }
+.linha-opcao { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: .5rem; }
+.linha-opcao [data-campo='nome'] { flex: 1 1 9rem; width: auto; }
+.linha-opcao [data-campo='preco'], .linha-opcao [data-campo='estoque'] { flex: 0 0 6.5rem; width: 6.5rem; }
 .painel { background: #fff; border: 1px solid var(--marca); border-radius: 1rem; padding: 1.25rem; }
 .painel-edicao { background: var(--marca-clara); border: 2px dashed var(--marca-media); border-radius: 1rem; padding: 1.25rem; }
 

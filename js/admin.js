@@ -1,7 +1,7 @@
 'use strict';
 // Painel da loja: resumo com gráficos, pedidos, clientes, produtos e configurações.
 
-App.pronto.then(async ({ loja, admin, catalogo, atendimento }) => {
+App.pronto.then(async ({ loja, admin, catalogo, atendimento, modulos }) => {
   if (!admin) return location.replace('/login');
   const { esc, brl, dataBr, api, aviso, minusculas } = App;
   const el = (id) => document.getElementById(id);
@@ -144,7 +144,7 @@ App.pronto.then(async ({ loja, admin, catalogo, atendimento }) => {
           </div>
         </div>
         <ul>
-          ${p.itens.map((i) => `<li>${i.quantidade}× ${esc(i.nome)} — ${brl(i.precoUnit * i.quantidade)}${i.observacoes ? `<br><em>Alterações: ${esc(i.observacoes)}</em>` : ''}</li>`).join('')}
+          ${p.itens.map((i) => `<li>${i.quantidade}× ${esc(i.nome + App.opcoesTexto(i.variacao, i.adicionais))} — ${brl(i.precoUnit * i.quantidade)}${i.observacoes ? `<br><em>Alterações: ${esc(i.observacoes)}</em>` : ''}</li>`).join('')}
         </ul>
         <div class="fs-sm mt-3">
           <strong>${p.entrega.tipo === 'entrega' ? 'Entrega' : 'Retirada'} em ${dataBr(p.entrega.data)}</strong>${p.entrega.endereco ? ` · ${esc(p.entrega.endereco)}` : ''}
@@ -224,9 +224,16 @@ App.pronto.then(async ({ loja, admin, catalogo, atendimento }) => {
         <button type="button" class="btn btn-outline theme-primary btn-sm" data-mover="${i}" data-passo="1" aria-label="Descer ${esc(c.nome)}" ${i === categorias.length - 1 ? 'disabled' : ''}>↓</button>
         <button type="button" class="botao-texto" data-excluir-categoria="${c.id}" data-nome="${esc(c.nome)}">Excluir</button>
       </div>`).join('') : '<p class="suave mb-0">Nenhuma categoria criada.</p>';
+    // Estoque (recurso opcional): produto simples é ajustado aqui mesmo; com variações, na tela de edição.
+    const campoEstoque = (d) => (!modulos.estoque ? '' : d.variacoes.length
+      ? `<span class="suave fs-sm">Estoque: ${esc(d.variacoes.map((v) => `${v.nome} ${v.estoque ?? '∞'}`).join(' · '))}</span>`
+      : `<label class="d-flex gap-2 align-items-center fs-sm">Estoque
+          <input class="form-control" type="number" min="0" max="999999" step="1" data-estoque="${d.id}" value="${d.estoque ?? ''}" placeholder="∞" style="width: 5.5rem"></label>`);
     el('lista-produtos').innerHTML = produtos.length ? produtos.map((d) => `
       <div class="linha-produto">
-        <span class="nome">${esc(d.emoji)} ${esc(d.nome)} <span class="suave fw-normal">· ${brl(d.preco)}</span></span>
+        <span class="nome">${esc(d.emoji)} ${esc(d.nome)} <span class="suave fw-normal">· ${App.precoVitrine(d)}</span>
+          ${d.esgotado ? '<span class="selo cinza">Esgotado</span>' : ''}</span>
+        ${campoEstoque(d)}
         ${seletorCategoria(d)}
         <label class="d-flex gap-2 align-items-center fs-sm"><input type="checkbox" data-disponivel="${d.id}" ${d.disponivel ? 'checked' : ''}> Disponível</label>
         <a class="btn btn-outline theme-primary btn-sm" href="/produto/${esc(d.slug)}?editar">Editar</a>
@@ -235,9 +242,14 @@ App.pronto.then(async ({ loja, admin, catalogo, atendimento }) => {
   }
 
   el('lista-produtos').addEventListener('change', async (evento) => {
-    const { disponivel, categoria } = evento.target.dataset;
+    const { disponivel, categoria, estoque } = evento.target.dataset;
     try {
-      if (disponivel) {
+      if (estoque) {
+        const valor = evento.target.value.trim();
+        await api(`/api/produtos/${estoque}`, { metodo: 'PUT', corpo: { estoque: valor === '' ? null : Number(valor) } });
+        await carregarProdutos(); // o selo "Esgotado" depende do novo número
+        aviso(valor === '' ? 'Estoque sem controle.' : 'Estoque atualizado.');
+      } else if (disponivel) {
         await api(`/api/produtos/${disponivel}`, { metodo: 'PUT', corpo: { disponivel: evento.target.checked } });
         aviso(evento.target.checked ? 'Visível para os clientes.' : 'Oculto para os clientes.');
       } else if (categoria) {
@@ -317,8 +329,19 @@ App.pronto.then(async ({ loja, admin, catalogo, atendimento }) => {
     for (const campo of CAMPOS_LOJA) el(`loja-${campo}`).value = dadosLoja[campo] || '';
     el('loja-whatsapp').value = App.formatarTelefone(dadosLoja.whatsapp);
     for (const campo of CAMPOS_CATALOGO) el(`catalogo-${campo}`).value = catalogo[campo] || '';
+    for (const nome of MODULOS) el(`modulos-${nome}`).checked = modulos[nome];
     await carregarAtendimento();
   }
+
+  // ---- recursos opcionais do catálogo (variações, adicionais e estoque)
+  const MODULOS = ['variacoes', 'adicionais', 'estoque'];
+  el('form-modulos').addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    try {
+      await api('/api/configuracoes/modulos', { metodo: 'PUT', corpo: Object.fromEntries(MODULOS.map((nome) => [nome, el(`modulos-${nome}`).checked])) });
+      location.reload(); // os recursos mudam várias telas do painel: recarregar atualiza tudo de uma vez
+    } catch (erro) { tratarErro(erro); }
+  });
 
   // ---- horários, fuso e formas de receber o pedido
   const CAMPOS_DIA = ['abre', 'fecha', 'abre2', 'fecha2'];

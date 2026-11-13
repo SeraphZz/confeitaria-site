@@ -262,6 +262,17 @@
               <div class="mb-5"><label class="form-label" for="catalogo-emojiPadrao">Ícone para itens sem foto</label><input class="form-control" id="catalogo-emojiPadrao" maxlength="8" style="max-width: 6rem"></div>
               <button class="btn btn-solid theme-primary">Salvar</button>
             </form>
+            <form class="painel mt-5" id="form-modulos">
+              <h2 class="fs-lg mb-2">Recursos opcionais</h2>
+              <p class="suave fs-sm mb-4">Ligue só o que a sua loja usa. Um recurso desligado some das telas e deixa de valer nos pedidos novos; o que você já cadastrou fica guardado e volta se religar. Depois de ligar, os campos aparecem na tela de edição de cada item.</p>
+              <label class="d-flex gap-2 align-items-baseline mb-3"><input type="checkbox" id="modulos-variacoes">
+                <span><strong>Variações</strong><br><span class="suave fs-sm">O mesmo item em opções com preço próprio (ex.: Pequeno, Médio, Grande). O cliente escolhe uma.</span></span></label>
+              <label class="d-flex gap-2 align-items-baseline mb-3"><input type="checkbox" id="modulos-adicionais">
+                <span><strong>Adicionais</strong><br><span class="suave fs-sm">Extras que o cliente pode marcar, somados ao preço (ex.: calda, embalagem para presente).</span></span></label>
+              <label class="d-flex gap-2 align-items-baseline mb-5"><input type="checkbox" id="modulos-estoque">
+                <span><strong>Estoque</strong><br><span class="suave fs-sm">Você informa quanto tem de cada item. Cada pedido diminui o estoque, o item esgotado não pode ser pedido, e cancelar um pedido devolve a quantidade.</span></span></label>
+              <button class="btn btn-solid theme-primary">Salvar</button>
+            </form>
           </div>
           <div class="col-12 lg:col-5">
             <form class="painel" id="form-senha">

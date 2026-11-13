@@ -83,7 +83,7 @@ test('primeira execução cria o cardápio de exemplo', async () => {
   assert.equal(r.status, 200);
   assert.equal(r.dados.length, 6);
   const produto = r.dados[0];
-  assert.deepEqual(Object.keys(produto).sort(), ['categoriaId', 'descricao', 'disponivel', 'emoji', 'id', 'imagem', 'nome', 'preco', 'slug', 'unidade']);
+  assert.deepEqual(Object.keys(produto).sort(), ['adicionais', 'categoriaId', 'descricao', 'disponivel', 'emoji', 'esgotado', 'estoque', 'id', 'imagem', 'nome', 'preco', 'slug', 'unidade', 'variacoes']);
   const porSlug = await visitante.get(`/api/produtos/${produto.slug}`);
   assert.equal(porSlug.dados.id, produto.id);
   assert.equal((await visitante.get('/api/produtos/nao-existe')).status, 404);

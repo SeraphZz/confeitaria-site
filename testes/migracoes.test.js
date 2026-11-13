@@ -147,6 +147,31 @@ test('migração 003: produtos que já existiam ficam sem categoria; apagar a ca
   assert.deepEqual({ ...db.prepare('SELECT nome, categoria_id FROM produtos').get() }, { nome: 'Bolo', categoria_id: null });
 });
 
+test('migração 004: produtos e pedidos antigos ficam sem estoque, variação e adicionais', () => {
+  const migracoes = carregarMigracoes();
+  aplicar(db, { migracoes: migracoes.slice(0, 3), log: silencio });
+  db.exec(`
+    INSERT INTO produtos (id, slug, nome, preco, unidade, emoji) VALUES ('p1', 'bolo', 'Bolo', 5000, 'unidade', '🎂');
+    INSERT INTO pedidos (id, criado_em, cliente_nome, cliente_telefone, entrega_tipo, entrega_data, total, status)
+      VALUES ('x1', '2026-01-02T10:00:00.000Z', 'Ana', '11999999999', 'retirada', '2026-01-05', 10000, 'novo');
+    INSERT INTO pedido_itens (pedido_numero, produto_id, nome, preco_unit, quantidade) VALUES (1, 'p1', 'Bolo', 5000, 2);
+  `);
+
+  aplicar(db, { migracoes, log: silencio });
+  assert.equal(db.prepare("SELECT estoque FROM produtos WHERE id = 'p1'").get().estoque, null);
+  assert.deepEqual({ ...db.prepare('SELECT nome, preco_unit, quantidade, variacao_id, variacao, adicionais, estoque_situacao FROM pedido_itens').get() },
+    { nome: 'Bolo', preco_unit: 5000, quantidade: 2, variacao_id: null, variacao: '', adicionais: '[]', estoque_situacao: 0 });
+
+  // O banco não aceita estoque negativo, e apagar o produto leva as opções dele.
+  db.exec("INSERT INTO produto_variacoes (id, produto_id, nome, preco, estoque, ordem) VALUES ('v1', 'p1', 'Grande', 8000, 2, 0)");
+  db.exec("INSERT INTO produto_adicionais (id, produto_id, nome, preco, ordem) VALUES ('a1', 'p1', 'Calda', 300, 0)");
+  assert.throws(() => db.exec("UPDATE produtos SET estoque = -1 WHERE id = 'p1'"), /CHECK/);
+  assert.throws(() => db.exec("UPDATE produto_variacoes SET estoque = estoque - 3 WHERE id = 'v1'"), /CHECK/);
+  db.exec("DELETE FROM produtos WHERE id = 'p1'");
+  assert.equal(db.prepare('SELECT (SELECT COUNT(*) FROM produto_variacoes) + (SELECT COUNT(*) FROM produto_adicionais) AS n').get().n, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pedido_itens').get().n, 1);
+});
+
 test('arquivos de migração fora de sequência são recusados', () => {
   const dir = path.join(pasta, 'm');
   fs.mkdirSync(dir);

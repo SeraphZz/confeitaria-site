@@ -6,6 +6,7 @@ const banco = require('../banco');
 const { ErroHttp } = require('./http');
 const { texto, inteiro, lerTelefone, lerEndereco, formatarEndereco } = require('./validacao');
 const configuracoes = require('./configuracoes');
+const { modulos, paraVitrine, resolverEscolhas, descreverItem } = require('./catalogo');
 const { diaNoFuso, somarDias, instanteAntesDoDia } = require('./datas');
 
 const STATUS = ['novo', 'confirmado', 'producao', 'pronto', 'entregue', 'cancelado'];
@@ -31,14 +32,18 @@ function criarPedido(corpo, conta) {
   if (!Array.isArray(corpo.itens) || corpo.itens.length < 1 || corpo.itens.length > 50) {
     throw new ErroHttp(400, 'O carrinho está vazio.');
   }
+  const ligados = modulos();
   // Preço e nome vêm sempre do banco — nunca do que o navegador enviou.
   const itens = corpo.itens.map((item) => {
     // `doceId` é o nome antigo do campo: ainda pode chegar de um carrinho guardado no navegador antes da atualização.
     const id = item && (item.produtoId ?? item.doceId);
-    const produto = typeof id === 'string' ? banco.produtoPorId(id) : null;
-    if (!produto || !produto.disponivel) throw new ErroHttp(409, 'Um dos itens do carrinho não está mais disponível. Atualize a página.');
+    const gravado = typeof id === 'string' ? banco.produtoPorId(id) : null;
+    if (!gravado || !gravado.disponivel) throw new ErroHttp(409, 'Um dos itens do carrinho não está mais disponível. Atualize a página.');
+    const produto = paraVitrine(gravado, ligados);
     return {
-      produtoId: produto.id, nome: produto.nome, precoUnit: produto.preco,
+      produtoId: produto.id, nome: produto.nome,
+      // Variação e adicionais escolhidos, já conferidos; `precoUnit` inclui os dois.
+      ...resolverEscolhas(produto, item),
       quantidade: inteiro(item.quantidade, { min: 1, max: 999, campo: 'quantidade' }),
       observacoes: texto(item.observacoes, { max: 300, campo: 'alterações' }),
     };
@@ -51,11 +56,49 @@ function criarPedido(corpo, conta) {
     total: itens.reduce((s, i) => s + i.precoUnit * i.quantidade, 0), status: 'novo',
   };
   banco.transacao(() => {
+    // Com o estoque ligado, cada item sai do estoque na hora do pedido. Se faltar para algum, o erro desfaz a
+    // transação inteira: nada é baixado e o pedido não é gravado.
+    if (ligados.estoque) {
+      for (const item of itens) {
+        const { baixou, restam } = banco.baixarEstoque(item);
+        if (baixou) item.estoqueSituacao = 1;
+        else if (restam !== null) {
+          throw new ErroHttp(409, restam === 0
+            ? `"${descreverItem(item)}" esgotou. Tire do carrinho para enviar o pedido.`
+            : `Só restam ${restam} de "${descreverItem(item)}". Diminua a quantidade no carrinho.`);
+        }
+      }
+    }
     pedido.numero = banco.inserirPedido(pedido);
     // Primeira entrega de quem ainda não tinha endereço no cadastro: guarda para os próximos pedidos.
     if (endereco && !conta.endereco.cep) banco.salvarCliente({ ...conta, endereco });
   });
   return pedido;
+}
+
+// Muda o status do pedido e acerta o estoque: cancelar devolve o que o pedido tinha tirado; reabrir um pedido
+// cancelado tira de novo (e é recusado se não houver mais o bastante). Vale mesmo com o recurso de estoque desligado
+// agora: o que conta é se o item mexeu no estoque quando o pedido foi feito.
+function mudarStatus(pedido, status) {
+  const cancelando = status === 'cancelado' && pedido.status !== 'cancelado';
+  const reabrindo = status !== 'cancelado' && pedido.status === 'cancelado';
+  banco.transacao(() => {
+    if (cancelando) {
+      for (const item of pedido.itens) if (item.estoqueSituacao === 1) banco.devolverEstoque(item);
+      banco.trocarSituacaoEstoque(pedido.numero, 1, 2);
+    } else if (reabrindo) {
+      for (const item of pedido.itens) {
+        if (item.estoqueSituacao !== 2) continue;
+        const { baixou, restam } = banco.baixarEstoque(item);
+        if (!baixou && restam !== null) {
+          throw new ErroHttp(409, `Não dá para reabrir o pedido: ${restam === 0 ? 'não há mais' : `só restam ${restam} de`} "${descreverItem(item)}" no estoque.`);
+        }
+      }
+      banco.trocarSituacaoEstoque(pedido.numero, 2, 1);
+    }
+    banco.mudarStatusPedido(pedido.id, status);
+  });
+  return banco.pedidoPorId(pedido.id);
 }
 
 // Agrupa os pedidos por pessoa: pela conta, quando o cliente estava logado; senão pelo telefone.
@@ -71,7 +114,7 @@ function montarClientes() {
     }
     pessoas.get(chave).pedidos.push({
       numero: p.numero, criadoEm: p.criadoEm, total: p.total, status: p.status,
-      itens: p.itens.map((i) => `${i.quantidade}× ${i.nome}`).join(', '),
+      itens: p.itens.map((i) => `${i.quantidade}× ${descreverItem(i)}`).join(', '),
     });
   }
   return [...pessoas.values()].map((pessoa) => {
@@ -131,4 +174,4 @@ function montarDashboard(dias) {
   };
 }
 
-module.exports = { STATUS, criarPedido, montarClientes, montarDashboard };
+module.exports = { STATUS, criarPedido, mudarStatus, montarClientes, montarDashboard };
