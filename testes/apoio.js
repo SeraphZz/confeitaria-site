@@ -30,7 +30,8 @@ async function subirServidor(envExtra = {}) {
   // "visitante" diferente. Sem isso, os limites de tentativas por IP barrariam os próprios testes.
   const env = { ...process.env, PORT: String(porta), HOST: '127.0.0.1', DATA_DIR: pasta, ADMIN_PASSWORD: SENHA_ADMIN, TRUST_PROXY: '1', ...envExtra };
   // Nada do ambiente de quem roda os testes pode vazar para o servidor de teste.
-  for (const nome of ['NODE_ENV', 'SITE_URL', 'SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM', 'SMTP_PORT', 'SMTP_MODO']) {
+  for (const nome of ['NODE_ENV', 'SITE_URL', 'SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM', 'SMTP_PORT', 'SMTP_MODO',
+    'WHATSAPP_TOKEN', 'WHATSAPP_PHONE_ID', 'WHATSAPP_API_URL', 'SMS_TWILIO_SID', 'SMS_TWILIO_TOKEN', 'SMS_TWILIO_FROM', 'SMS_API_URL', 'NOTIFICACOES_ESPERAS']) {
     if (!(nome in envExtra)) delete env[nome];
   }
 

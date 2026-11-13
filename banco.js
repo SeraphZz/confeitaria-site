@@ -477,6 +477,63 @@ function paginarAuditoria({ pagina = 1, porPagina }) {
   return { itens, total };
 }
 
+// ---------------------------------------------------------------- notificações (fila e histórico)
+
+const notificacaoDe = (l) => l && {
+  id: l.id, chave: l.chave, evento: l.evento, canal: l.canal, para: l.para, destinatario: l.destinatario, pedidoNumero: l.pedido_numero,
+  conteudo: JSON.parse(l.conteudo), estado: l.estado, tentativas: l.tentativas, proximaEm: l.proxima_em,
+  criadaEm: l.criada_em, enviadaEm: l.enviada_em, erro: l.ultimo_erro, idExterno: l.id_externo,
+};
+
+// Põe uma mensagem na fila, para sair assim que possível. Se já existe uma com a mesma chave, não faz nada
+// (devolve false): o mesmo acontecimento não gera a mesma mensagem duas vezes.
+function inserirNotificacao(n) {
+  const agora = new Date().toISOString();
+  const { changes } = sql(`INSERT OR IGNORE INTO notificacoes (chave, evento, canal, para, destinatario, pedido_numero, conteudo, proxima_em, criada_em)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(n.chave, n.evento, n.canal, n.para, n.destinatario, n.pedidoNumero ?? null, JSON.stringify(n.conteudo), agora, agora);
+  return Number(changes) > 0;
+}
+
+const notificacaoPorId = (id) => notificacaoDe(sql('SELECT * FROM notificacoes WHERE id = ?').get(id));
+const notificacaoPorChave = (chave) => notificacaoDe(sql('SELECT * FROM notificacoes WHERE chave = ?').get(chave));
+
+// As pendentes cuja hora já chegou, das mais antigas para as mais novas.
+function notificacoesParaEnviar(agora, limite) {
+  return sql("SELECT * FROM notificacoes WHERE estado = 'pendente' AND proxima_em <= ? ORDER BY proxima_em, id LIMIT ?").all(agora, limite).map(notificacaoDe);
+}
+
+function marcarNotificacaoEnviada(id, idExterno) {
+  sql("UPDATE notificacoes SET estado = 'enviada', tentativas = tentativas + 1, enviada_em = ?, proxima_em = NULL, ultimo_erro = '', id_externo = ? WHERE id = ?")
+    .run(new Date().toISOString(), idExterno || '', id);
+}
+
+// `proximaEm` nulo = desistir (estado "falhou"); com data, a mensagem continua pendente e sai de novo nessa hora.
+function marcarNotificacaoFalha(id, erro, proximaEm) {
+  sql('UPDATE notificacoes SET estado = ?, tentativas = tentativas + 1, proxima_em = ?, ultimo_erro = ? WHERE id = ?')
+    .run(proximaEm ? 'pendente' : 'falhou', proximaEm || null, String(erro).slice(0, 300), id);
+}
+
+// Mensagem que falhou volta para a fila, com a contagem de tentativas zerada. Devolve false se não estava em "falhou".
+function reabrirNotificacao(id) {
+  const { changes } = sql("UPDATE notificacoes SET estado = 'pendente', tentativas = 0, proxima_em = ? WHERE id = ? AND estado = 'falhou'").run(new Date().toISOString(), id);
+  return Number(changes) > 0;
+}
+
+// Uma página do histórico, da mais recente para a mais antiga. `estado` opcional.
+function paginarNotificacoes({ estado, pagina = 1, porPagina }) {
+  const filtro = estado ? 'WHERE estado = ?' : '';
+  const parametros = estado ? [estado] : [];
+  const total = sql(`SELECT COUNT(*) AS n FROM notificacoes ${filtro}`).get(...parametros).n;
+  const itens = sql(`SELECT * FROM notificacoes ${filtro} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...parametros, porPagina, (pagina - 1) * porPagina).map(notificacaoDe);
+  return { itens, total };
+}
+
+// Faxina: mensagens já resolvidas (enviadas ou que falharam) criadas antes de `antesDe`. As pendentes ficam.
+function apagarNotificacoesAntigas(antesDe) {
+  return Number(sql("DELETE FROM notificacoes WHERE estado <> 'pendente' AND criada_em < ?").run(antesDe).changes);
+}
+
 // ---------------------------------------------------------------- migração do db.json antigo
 // Acontece sozinha, uma única vez: se existe data/db.json e o banco novo está vazio, copia tudo
 // e renomeia o arquivo antigo para db.json.migrado (fica guardado como cópia de segurança).
@@ -531,5 +588,7 @@ module.exports = {
   listarPerfis, perfilPorId, perfilDeSistema, usuariosNoPerfil, salvarPerfil, apagarPerfil,
   listarUsuarios, usuarioPorId, usuarioPorLogin, contarUsuarios, contarAdministradoresAtivos, salvarUsuario,
   inserirAuditoria, paginarAuditoria,
+  inserirNotificacao, notificacaoPorId, notificacaoPorChave, notificacoesParaEnviar, marcarNotificacaoEnviada, marcarNotificacaoFalha,
+  reabrirNotificacao, paginarNotificacoes, apagarNotificacoesAntigas,
   criarSessao, sessaoPorHash, apagarSessao, apagarSessoesVencidas, apagarSessoesDoCliente, apagarSessoesDoUsuario,
 };

@@ -24,6 +24,7 @@ const rotas = [
   ...require('./src/rotas/pedidos'),
   ...require('./src/rotas/loja'),
   ...require('./src/rotas/equipe'),
+  ...require('./src/rotas/notificacoes'),
 ];
 
 async function atender(req, res) {
@@ -62,4 +63,6 @@ http.createServer((req, res) => {
   });
 }).listen(PORTA, HOST, () => {
   console.log(`Loja no ar: http://localhost:${PORTA}  (painel: /login)`);
+  // Liga o envio das notificações: o que ficou na fila da última execução sai agora.
+  require('./src/notificacoes/fila').iniciar();
 });

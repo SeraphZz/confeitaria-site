@@ -51,7 +51,7 @@ test('painel lê as seções editáveis, e nunca a conta de acesso', async () =>
   assert.equal((await cliente.get('/api/configuracoes')).status, 401);
   const r = await loja.get('/api/configuracoes');
   assert.equal(r.status, 200);
-  assert.deepEqual(Object.keys(r.dados).sort(), ['atendimento', 'catalogo', 'loja', 'modulos', 'operacao', 'sobre']);
+  assert.deepEqual(Object.keys(r.dados).sort(), ['atendimento', 'catalogo', 'loja', 'modulos', 'notificacoes', 'operacao', 'sobre']);
   assert.deepEqual(r.dados.operacao, { fusoHorario: 'America/Sao_Paulo' }); // padrão, sem nada gravado no banco
   assert.doesNotMatch(r.texto, /hash|salt|confeiteira"/);
 });

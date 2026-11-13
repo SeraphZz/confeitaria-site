@@ -17,6 +17,7 @@ const { texto } = require('./validacao');
 const { fusoValido } = require('./datas');
 const { FONTES, FONTE_PADRAO, normalizarCor } = require('./tema');
 const atendimento = require('./atendimento');
+const notificacoes = require('./notificacoes/modelos');
 
 const SECOES = {
   loja: {
@@ -118,6 +119,10 @@ const SECOES = {
     },
   },
 
+  // Notificações: quais canais estão ligados e o texto de cada mensagem (ver src/notificacoes/modelos.js).
+  // As credenciais dos canais não ficam aqui: são variáveis de ambiente do servidor.
+  notificacoes: { publica: false, editavel: true, padrao: notificacoes.PADRAO, completar: notificacoes.completar, validar: (corpo) => notificacoes.validar(corpo) },
+
   // Alterações de aparência ainda não publicadas (mesmo formato de `tema`). Só quem está no painel vê.
   temaRascunho: { publica: false, editavel: false, padrao: null },
 };
@@ -129,8 +134,9 @@ function secao(nome) {
 
 // Valor atual da seção, completado com os padrões. Seção interna sem registro no banco devolve null.
 function ler(nome) {
-  const { padrao } = secao(nome);
+  const { padrao, completar } = secao(nome);
   const gravado = banco.lerConfig(nome);
+  if (completar) return completar(gravado); // seção com objetos dentro de objetos: os padrões entram em cada nível
   if (!padrao) return gravado;
   return { ...padrao, ...(gravado || {}) };
 }

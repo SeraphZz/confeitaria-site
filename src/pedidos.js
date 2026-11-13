@@ -9,6 +9,7 @@ const configuracoes = require('./configuracoes');
 const { modulos, paraVitrine, resolverEscolhas, descreverItem } = require('./catalogo');
 const { diaNoFuso, somarDias, instanteAntesDoDia } = require('./datas');
 const statusPedido = require('./status');
+const notificacoes = require('./notificacoes/fila');
 
 function criarPedido(corpo, conta) {
   const cliente = corpo.cliente || {};
@@ -47,11 +48,12 @@ function criarPedido(corpo, conta) {
     };
   });
 
+  const statusInicial = statusPedido.inicial();
   const pedido = {
     id: crypto.randomUUID(), criadoEm: new Date().toISOString(),
     clienteId: conta.id, cliente: { nome, telefone }, entrega: { tipo, data, endereco: endereco ? formatarEndereco(endereco) : '' },
     itens, observacoes: texto(corpo.observacoes, { max: 500, campo: 'observações' }),
-    total: itens.reduce((s, i) => s + i.precoUnit * i.quantidade, 0), status: statusPedido.inicial().id,
+    total: itens.reduce((s, i) => s + i.precoUnit * i.quantidade, 0), status: statusInicial.id,
     historico: [],
   };
   banco.transacao(() => {
@@ -71,6 +73,8 @@ function criarPedido(corpo, conta) {
     pedido.numero = banco.inserirPedido(pedido);
     // Primeira entrega de quem ainda não tinha endereço no cadastro: guarda para os próximos pedidos.
     if (endereco && !conta.endereco.cep) banco.salvarCliente({ ...conta, endereco });
+    // As mensagens (confirmação para o cliente, aviso para a loja) entram na fila na mesma transação do pedido.
+    notificacoes.aoCriarPedido(pedido, conta, statusInicial.nome);
   });
   return pedido;
 }
@@ -115,6 +119,8 @@ function mudarStatus(pedido, status, { quem, observacao = '' } = {}) {
       pedidoNumero: pedido.numero, de: pedido.status, deNome: de ? de.nome : pedido.status, para: para.id, paraNome: para.nome,
       usuarioId: quem?.id, usuarioNome: quem?.nome, observacao: nota,
     });
+    // O aviso ao cliente entra na fila junto com a mudança (a observação é interna e não vai na mensagem).
+    notificacoes.aoMudarStatus(pedido, para, pedido.historico.length + 1);
   });
   return banco.pedidoPorId(pedido.id);
 }

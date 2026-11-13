@@ -21,6 +21,7 @@ const PERMISSOES = [
   { id: 'configuracoes.editar', nome: 'Alterar configurações', descricao: 'Dados da loja, horários, entrega e recursos opcionais.' },
   { id: 'usuarios.gerenciar', nome: 'Gerenciar a equipe', descricao: 'Criar pessoas e perfis e definir o que cada um pode fazer.' },
   { id: 'auditoria.ver', nome: 'Ver o registro de atividades', descricao: 'Quem fez o quê no painel, e quando.' },
+  { id: 'notificacoes.gerenciar', nome: 'Acompanhar as notificações', descricao: 'Ver as mensagens enviadas aos clientes (com o contato de cada um), reenviar as que falharam e enviar um teste.' },
 ];
 const TODAS = PERMISSOES.map((p) => p.id);
 const existe = (id) => TODAS.includes(id);
