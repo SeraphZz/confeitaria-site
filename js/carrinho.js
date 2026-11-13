@@ -1,23 +1,39 @@
 'use strict';
 // Carrinho + formulário de reserva do pedido.
 
-App.pronto.then(async ({ loja, admin, cliente }) => {
-  const { esc, brl, api, aviso, carrinho, fotoHtml } = App;
+App.pronto.then(async ({ loja, admin, cliente, catalogo, atendimento }) => {
+  const { esc, brl, api, aviso, carrinho, fotoHtml, minusculas } = App;
+  const plural = esc(minusculas(catalogo.nomePlural));
   const conteudo = document.getElementById('conteudo');
   document.title = `Carrinho · ${loja.nome}`;
 
-  const doces = new Map((await api('/api/doces')).map((d) => [d.id, d]));
-  // Tira do carrinho doces que deixaram de existir ou ficaram indisponíveis.
-  const validos = carrinho.itens().filter((i) => doces.has(i.doceId));
-  if (validos.length !== carrinho.itens().length) carrinho.salvar(validos);
+  const produtos = new Map((await api('/api/produtos')).map((p) => [p.id, p]));
+  // Variação, adicionais e preço de uma unidade de um item, conforme o produto está agora (null = escolha que não existe mais).
+  const escolhas = (item) => App.escolhasDoItem(produtos.get(item.produtoId), item);
+  // Tira do carrinho o que deixou de existir, ficou indisponível ou teve as opções alteradas pela loja.
+  const validos = carrinho.itens().filter((i) => produtos.has(i.produtoId) && escolhas(i));
+  const retirados = carrinho.itens().length - validos.length;
+  if (retirados) {
+    carrinho.salvar(validos);
+    aviso(retirados === 1 ? 'Um item saiu do carrinho porque não está mais disponível.' : `${retirados} itens saíram do carrinho porque não estão mais disponíveis.`);
+  }
 
   const hoje = new Date();
   const hojeIso = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
   // Cliente logado: os dados do cadastro já vêm preenchidos (e ainda podem ser ajustados neste pedido).
   const rascunho = {
     nome: cliente?.nome || '', telefone: App.formatarTelefone(cliente?.telefone), endereco: cliente?.endereco || {},
-    tipo: 'retirada', data: '', observacoes: '',
+    tipo: atendimento.retirada.ativa ? 'retirada' : 'entrega', data: '', observacoes: '',
   };
+
+  // Formas de receber o pedido que a loja oferece (Painel > Configurações), com as informações de cada uma.
+  const FORMAS = [
+    { tipo: 'retirada', rotulo: 'Retirar na loja', detalhe: atendimento.retirada.instrucoes },
+    { tipo: 'entrega', rotulo: `Entrega${atendimento.entrega.taxa ? ` (${atendimento.entrega.taxa})` : ''}`, detalhe: atendimento.entrega.instrucoes },
+  ].filter((forma) => atendimento[forma.tipo].ativa);
+  const formasHtml = () => FORMAS.map((forma) => `
+              <label class="d-flex gap-2 align-items-baseline mb-1"><input type="radio" name="tipo" value="${forma.tipo}" ${rascunho.tipo === forma.tipo ? 'checked' : ''}>
+                <span>${esc(forma.rotulo)}${forma.detalhe ? `<br><span class="suave fs-sm pre-linha">${esc(forma.detalhe)}</span>` : ''}</span></label>`).join('');
 
   // Pedido só com login: quem não entrou vê este convite no lugar do formulário (o carrinho fica guardado).
   const convite = admin ? `
@@ -35,30 +51,33 @@ App.pronto.then(async ({ loja, admin, cliente }) => {
     </div>`;
 
   function total(itens) {
-    return itens.reduce((s, i) => s + doces.get(i.doceId).preco * i.quantidade, 0);
+    return itens.reduce((s, i) => s + escolhas(i).precoUnit * i.quantidade, 0);
   }
 
   function desenhar() {
     const itens = carrinho.itens();
     if (!itens.length) {
-      conteudo.innerHTML = '<p class="suave">Seu carrinho está vazio.</p><a class="btn btn-solid theme-primary" href="/">Escolher doces</a>';
+      conteudo.innerHTML = `<p class="suave">Seu carrinho está vazio.</p><a class="btn btn-solid theme-primary" href="/">Escolher ${plural}</a>`;
       return;
     }
     conteudo.innerHTML = `
       <div class="row g-7">
         <div class="col-12 lg:col-7">
           ${itens.map((item, i) => {
-            const d = doces.get(item.doceId);
+            const d = produtos.get(item.produtoId);
+            const { variacao, adicionais, precoUnit } = escolhas(item);
             return `
             <div class="item-carrinho">
               ${fotoHtml(d)}
               <div>
-                <a class="fw-semibold" href="/doce/${esc(d.slug)}">${esc(d.nome)}</a>
-                <div class="suave fs-sm">${brl(d.preco)} / ${esc(d.unidade)}</div>
+                <a class="fw-semibold" href="/produto/${esc(d.slug)}">${esc(d.nome)}</a>
+                ${variacao ? `<div class="fs-sm">${esc(variacao.nome)}</div>` : ''}
+                ${adicionais.length ? `<div class="fs-sm">+ ${esc(adicionais.map((a) => a.nome).join(', '))}</div>` : ''}
+                <div class="suave fs-sm">${brl(precoUnit)} / ${esc(d.unidade)}</div>
                 ${item.observacoes ? `<div class="fs-sm mt-1"><strong>Alterações:</strong> ${esc(item.observacoes)}</div>` : ''}
               </div>
               <div class="lado">
-                <strong>${brl(d.preco * item.quantidade)}</strong>
+                <strong>${brl(precoUnit * item.quantidade)}</strong>
                 <div class="qtd">
                   <button type="button" data-i="${i}" data-passo="-1" aria-label="Diminuir">−</button>
                   <input type="number" min="1" max="999" value="${item.quantidade}" data-i="${i}" aria-label="Quantidade de ${esc(d.nome)}">
@@ -75,7 +94,7 @@ App.pronto.then(async ({ loja, admin, cliente }) => {
           ${!cliente ? convite : `
           <form class="painel" id="form-pedido">
             <h2 class="fs-lg mb-2">Reservar pedido</h2>
-            <p class="suave fs-sm mb-4">Você não paga nada agora. A confeiteira confirma o pedido e combina o pagamento pelo WhatsApp.</p>
+            <p class="suave fs-sm mb-4">Você não paga nada agora. A loja confirma o pedido e combina o pagamento pelo WhatsApp.</p>
             <div class="mb-4"><label class="form-label" for="nome">Seu nome</label>
               <input class="form-control" id="nome" maxlength="80" required autocomplete="name" value="${esc(rascunho.nome)}"></div>
             <div class="mb-4"><label class="form-label" for="telefone">WhatsApp com DDD</label>
@@ -84,8 +103,7 @@ App.pronto.then(async ({ loja, admin, cliente }) => {
               <input class="form-control" id="data" type="date" required min="${hojeIso}" value="${esc(rascunho.data)}"></div>
             <fieldset class="mb-4">
               <legend class="form-label">Como prefere receber?</legend>
-              <label class="d-flex gap-2 align-items-center mb-1"><input type="radio" name="tipo" value="retirada" ${rascunho.tipo === 'retirada' ? 'checked' : ''}> Retirar com a confeiteira</label>
-              <label class="d-flex gap-2 align-items-center"><input type="radio" name="tipo" value="entrega" ${rascunho.tipo === 'entrega' ? 'checked' : ''}> Entrega (taxa a combinar)</label>
+              ${formasHtml()}
             </fieldset>
             <fieldset class="mb-4" id="grupo-endereco" ${rascunho.tipo === 'entrega' ? '' : 'hidden disabled'}>
               <legend class="form-label">Endereço de entrega</legend>
@@ -161,11 +179,11 @@ App.pronto.then(async ({ loja, admin, cliente }) => {
         <div class="painel text-center" style="max-width: 34rem; margin: 0 auto">
           <div style="font-size: 3rem" aria-hidden="true">🎉</div>
           <h2 class="mb-2">Pedido nº ${pedido.numero} recebido!</h2>
-          <p>Total: <strong>${brl(pedido.total)}</strong>. A confeiteira vai entrar em contato pelo WhatsApp para confirmar e combinar o pagamento.</p>
+          <p>Total: <strong>${brl(pedido.total)}</strong>. A loja vai entrar em contato pelo WhatsApp para confirmar e combinar o pagamento.</p>
           <div class="d-flex flex-wrap gap-3 justify-content-center">
             ${loja.whatsapp ? `<a class="btn btn-solid theme-primary" href="${esc(App.linkWhats(loja.whatsapp, mensagem))}" target="_blank" rel="noopener">Avisar pelo WhatsApp</a>` : ''}
             ${cliente ? '<a class="btn btn-outline theme-primary" href="/conta">Ver meus pedidos</a>' : ''}
-            <a class="btn btn-outline theme-primary" href="/">Voltar aos doces</a>
+            <a class="btn btn-outline theme-primary" href="/">Voltar para ${plural}</a>
           </div>
         </div>`;
     } catch (erro) {

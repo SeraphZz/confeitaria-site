@@ -54,22 +54,61 @@ const App = (() => {
     itens() {
       try {
         const itens = JSON.parse(localStorage.getItem('carrinho') || '[]');
-        return Array.isArray(itens) ? itens : [];
+        if (!Array.isArray(itens)) return [];
+        // Carrinhos guardados antes de "doce" virar "produto" usam o campo antigo `doceId`.
+        // Todo item sai daqui com `variacaoId` ('' = nenhuma) e `adicionaisIds` (lista), mesmo os guardados antes
+        // de esses recursos existirem.
+        return itens.map(({ doceId, ...item }) => ({
+          ...item, produtoId: item.produtoId || doceId,
+          variacaoId: typeof item.variacaoId === 'string' ? item.variacaoId : '',
+          adicionaisIds: Array.isArray(item.adicionaisIds) ? item.adicionaisIds : [],
+        }));
       } catch { return []; }
     },
     salvar(itens) {
       localStorage.setItem('carrinho', JSON.stringify(itens));
       atualizarContador();
     },
-    adicionar(doceId, quantidade, observacoes) {
+    // `variacaoId` e `adicionaisIds`: o que o cliente escolheu na página do produto (ver escolhasDoItem).
+    adicionar(produtoId, quantidade, observacoes, { variacaoId = '', adicionaisIds = [] } = {}) {
       const itens = this.itens();
-      const igual = itens.find((i) => i.doceId === doceId && i.observacoes === observacoes);
+      // Mesmo produto com as mesmas escolhas e o mesmo recado soma na linha que já existe.
+      const chave = (i) => JSON.stringify([i.produtoId, i.variacaoId, [...i.adicionaisIds].sort(), i.observacoes]);
+      const novo = { produtoId, quantidade, observacoes, variacaoId, adicionaisIds };
+      const igual = itens.find((i) => chave(i) === chave(novo));
       if (igual) igual.quantidade = Math.min(999, igual.quantidade + quantidade);
-      else itens.push({ doceId, quantidade, observacoes });
+      else itens.push(novo);
       this.salvar(itens);
     },
     quantidadeTotal() { return this.itens().reduce((s, i) => s + i.quantidade, 0); },
   };
+
+  // ---- variações e adicionais (recursos opcionais: as listas vêm vazias quando a loja não usa)
+
+  // Confere as escolhas de um item do carrinho com o produto como ele está agora. Devolve a variação, os adicionais
+  // e o preço de uma unidade — ou null, se alguma escolha deixou de existir (o servidor faz a mesma conferência).
+  function escolhasDoItem(produto, item) {
+    const variacao = produto.variacoes.find((v) => v.id === item.variacaoId) || null;
+    if (produto.variacoes.length ? !variacao : item.variacaoId) return null;
+    const adicionais = produto.adicionais.filter((a) => item.adicionaisIds.includes(a.id));
+    if (adicionais.length !== new Set(item.adicionaisIds).size) return null;
+    return { variacao, adicionais, precoUnit: (variacao ? variacao.preco : produto.preco) + adicionais.reduce((s, a) => s + a.preco, 0) };
+  }
+
+  // Texto (ainda sem escapar) das escolhas de um item: " (Grande) + Calda, Granulado". Serve para o carrinho e para
+  // pedidos já feitos: `variacao` pode ser o nome ou o objeto; `adicionais`, objetos com `nome`.
+  function opcoesTexto(variacao, adicionais = []) {
+    const nome = variacao && typeof variacao === 'object' ? variacao.nome : variacao;
+    return (nome ? ` (${nome})` : '') + (adicionais.length ? ` + ${adicionais.map((a) => a.nome).join(', ')}` : '');
+  }
+
+  // Preço na vitrine. Produto com variações de preços diferentes mostra "a partir de".
+  function precoVitrine(produto) {
+    if (!produto.variacoes.length) return brl(produto.preco);
+    const precos = produto.variacoes.map((v) => v.preco);
+    const menor = Math.min(...precos);
+    return (menor === Math.max(...precos) ? '' : 'a partir de ') + brl(menor);
+  }
 
   function atualizarContador() {
     const el = document.getElementById('contador-carrinho');
@@ -80,10 +119,10 @@ const App = (() => {
   }
 
   // `ampliar: true` transforma a foto em um botão que abre a imagem inteira (ver visor, abaixo).
-  function fotoHtml(doce, classe = '', { ampliar = false } = {}) {
-    const img = `<img src="${esc(doce.imagem)}" alt="${esc(doce.nome)}" loading="lazy">`;
-    const dentro = !doce.imagem ? `<span aria-hidden="true">${esc(doce.emoji)}</span>`
-      : ampliar ? `<button type="button" class="ampliar" data-ampliar aria-label="Ver a foto inteira de ${esc(doce.nome)}">${img}</button>` : img;
+  function fotoHtml(produto, classe = '', { ampliar = false } = {}) {
+    const img = `<img src="${esc(produto.imagem)}" alt="${esc(produto.nome)}" loading="lazy">`;
+    const dentro = !produto.imagem ? `<span aria-hidden="true">${esc(produto.emoji)}</span>`
+      : ampliar ? `<button type="button" class="ampliar" data-ampliar aria-label="Ver a foto inteira de ${esc(produto.nome)}">${img}</button>` : img;
     return `<div class="foto ${classe}">${dentro}</div>`;
   }
 
@@ -106,32 +145,39 @@ const App = (() => {
   });
 
   // Reduz a foto no navegador (máx. 1200px, JPEG) para o envio ser rápido mesmo pelo celular.
-  async function reduzirImagem(arquivo) {
+  // `png: true` mantém o fundo transparente (logotipo, ícone); `maximo` é o maior lado, em pixels.
+  async function reduzirImagem(arquivo, { maximo = 1200, png = false } = {}) {
     const bitmap = await createImageBitmap(arquivo);
-    const escala = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
+    const escala = Math.min(1, maximo / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(bitmap.width * escala);
     canvas.height = Math.round(bitmap.height * escala);
     canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.85);
+    return png ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.85);
   }
 
-  function montarCabecalho({ loja, admin, cliente }) {
+  function montarCabecalho({ loja, admin, usuario, cliente, catalogo, tema, previaTema }) {
+    // Com logotipo enviado, ele aparece ao lado do nome; sem, fica o ícone padrão do catálogo.
+    const simbolo = tema.logo
+      ? `<img class="marca-logo" src="${esc(tema.logo)}" alt="">`
+      : `<span class="marca-icone" aria-hidden="true">${esc(catalogo.emojiPadrao)} </span>`;
     const aqui = location.pathname;
     const elo = (href, rotulo, extra = '') =>
       `<a class="elo${aqui === href ? ' ativo' : ''}" href="${href}">${rotulo}${extra}</a>`;
     const faixa = admin ? `
       <div class="faixa-admin"><div class="container d-flex justify-content-between gap-4">
-        <span>Você está logada como confeiteira.</span>
+        <span>${previaTema
+          ? 'Prévia da nova aparência: só você está vendo. <a href="/admin#aparencia">Publicar ou descartar</a>'
+          : `Você entrou como ${esc(usuario.nome)}.`}</span>
         <span><a href="/admin">Painel</a> · <button type="button" id="sair">Sair</button></span>
       </div></div>` : '';
     document.getElementById('cabecalho').innerHTML = `${faixa}
       <header class="topo"><div class="container topo-linha">
-        <a class="marca" href="/"><span class="marca-icone" aria-hidden="true">🧁 </span>${esc(loja.nome)}</a>
+        <a class="marca" href="/">${simbolo}${esc(loja.nome)}</a>
         <nav class="d-flex align-items-center" aria-label="Principal">
-          ${elo('/', 'Doces')}${elo('/sobre', 'Sobre')}
+          ${elo('/', esc(catalogo.nomePlural))}${elo('/sobre', 'Sobre')}
           ${elo('/carrinho', 'Carrinho', '<span class="contador" id="contador-carrinho" hidden>0</span>')}
-          ${admin ? '' : cliente
+          ${admin ? '<a class="btn btn-solid theme-primary btn-sm botao-entrar" href="/admin">Painel</a>' : cliente
             ? elo('/conta', `Olá, ${esc(cliente.nome.split(' ')[0])}`)
             : '<a class="btn btn-solid theme-primary btn-sm botao-entrar" href="/login">Entrar</a>'}
         </nav>
@@ -145,7 +191,29 @@ const App = (() => {
     location.href = '/';
   }
 
-  function montarRodape({ loja }) {
+  // "09:00" -> "9h"; "18:30" -> "18h30".
+  function horaCurta(hora) {
+    const [h, m] = hora.split(':');
+    return `${Number(h)}h${m === '00' ? '' : m}`;
+  }
+
+  // Junta dias seguidos com o mesmo horário: ["Seg a Sex: 9h às 18h", "Sáb: 9h às 13h", "Dom: fechado"].
+  function resumirHorarios(horarios) {
+    const NOMES = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const descrever = (d) => (!d.aberto ? 'fechado'
+      : `${horaCurta(d.abre)} às ${horaCurta(d.fecha)}${d.abre2 ? ` e ${horaCurta(d.abre2)} às ${horaCurta(d.fecha2)}` : ''}`);
+    const grupos = [];
+    for (const dia of [1, 2, 3, 4, 5, 6, 0]) { // a semana começa na segunda
+      const texto = descrever(horarios[dia]);
+      const ultimo = grupos.at(-1);
+      if (ultimo && ultimo.texto === texto) { ultimo.fim = dia; ultimo.dias++; } else grupos.push({ inicio: dia, fim: dia, dias: 1, texto });
+    }
+    // Dois dias: "Ter e Qua"; três ou mais: "Seg a Sex".
+    const periodo = (g) => (g.dias === 1 ? NOMES[g.inicio] : `${NOMES[g.inicio]} ${g.dias === 2 ? 'e' : 'a'} ${NOMES[g.fim]}`);
+    return grupos.map((g) => `${periodo(g)}: ${g.texto}`);
+  }
+
+  function montarRodape({ loja, atendimento }) {
     const contatos = [
       loja.whatsapp && `<a href="${linkWhats(loja.whatsapp)}" target="_blank" rel="noopener">WhatsApp ${formatarTelefone(loja.whatsapp)}</a>`,
       loja.instagram && `<a href="https://instagram.com/${esc(loja.instagram)}" target="_blank" rel="noopener">@${esc(loja.instagram)}</a>`,
@@ -155,12 +223,18 @@ const App = (() => {
       <footer class="rodape"><div class="container">
         <div class="marca mb-3">${esc(loja.nome)}</div>
         <div class="contatos mb-3">${contatos}</div>
-        <div class="suave fs-sm">${esc(loja.cidade)}</div>
+        <div class="suave fs-sm">${esc([loja.endereco, loja.cidade].filter(Boolean).join(' · '))}</div>
+        ${atendimento.exibirHorarios ? `
+        <div class="suave fs-sm mt-3"><strong>Horários:</strong> ${resumirHorarios(atendimento.horarios).map(esc).join(' · ')}${
+          atendimento.observacaoHorarios ? `<br>${esc(atendimento.observacaoHorarios)}` : ''}</div>` : ''}
       </div></footer>`;
   }
 
-  // Cada página espera por isto antes de desenhar: traz dados da loja e se a confeiteira está logada.
+  // Cada página espera por isto antes de desenhar: traz dados da loja e quem está logado.
   const pronto = api('/api/site').then((site) => {
+    // site.pode('produtos.editar'): se quem está logado é da equipe e tem a permissão. Serve para as telas mostrarem
+    // só o que a pessoa consegue usar; quem decide de verdade é o servidor, em cada rota.
+    site.pode = (permissao) => Boolean(site.usuario?.permissoes.includes(permissao));
     montarCabecalho(site);
     montarRodape(site);
     return site;
@@ -259,13 +333,16 @@ const App = (() => {
     });
   }
 
+  // "Doces" -> "doces", para usar o nome que a loja escolheu no meio de uma frase ("Ver doces").
+  const minusculas = (textoQualquer) => String(textoQualquer ?? '').toLocaleLowerCase('pt-BR');
+
   const STATUS = {
     novo: 'Novo', confirmado: 'Confirmado', producao: 'Em produção',
     pronto: 'Pronto', entregue: 'Entregue', cancelado: 'Cancelado',
   };
 
   return {
-    esc, brl, lerPreco, dataBr, api, aviso, carrinho, fotoHtml, reduzirImagem, sair, STATUS, pronto,
+    esc, brl, lerPreco, dataBr, api, aviso, carrinho, escolhasDoItem, opcoesTexto, precoVitrine, fotoHtml, reduzirImagem, sair, STATUS, pronto, minusculas, resumirHorarios,
     formatarTelefone, linkWhats, enderecoHtml, lerEndereco, ligarMascaras,
   };
 })();

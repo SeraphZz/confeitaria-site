@@ -49,10 +49,10 @@ sudo cp /opt/confeitaria/deploy/confeitaria.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now confeitaria
 sudo systemctl status confeitaria
-curl -s localhost:3000/api/doces | head -c 100
+curl -s localhost:3000/api/produtos | head -c 100
 ```
 
-O `curl` precisa devolver a lista de doces. Os dados ficam em `/var/lib/confeitaria`.
+O `curl` precisa devolver a lista de produtos. Os dados ficam em `/var/lib/confeitaria`.
 
 ## 6. HTTPS com o Caddy
 
@@ -76,7 +76,7 @@ Adicione a linha (todo dia às 3h):
 0 3 * * * cd /opt/confeitaria && DATA_DIR=/var/lib/confeitaria /usr/bin/node scripts/backup.js
 ```
 
-As cópias ficam em `/var/lib/confeitaria/backups`. Baixe uma para o seu computador de vez em quando, junto com `/var/lib/confeitaria/uploads` (as fotos).
+Cada cópia é uma pasta em `/var/lib/confeitaria/backups` com o banco (`loja.db`) e as fotos (`uploads/`). O script guarda as 14 mais recentes e apaga as mais antigas; para guardar mais, acrescente `--manter 30` ao fim da linha. Baixe uma cópia para o seu computador de vez em quando: se a máquina se perder, as cópias que estão nela se perdem junto.
 
 ## Atualizar o site depois
 

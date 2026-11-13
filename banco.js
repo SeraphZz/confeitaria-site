@@ -17,72 +17,10 @@ const db = new DatabaseSync(ARQUIVO);
 db.exec(`
   PRAGMA foreign_keys = ON;
   PRAGMA busy_timeout = 5000;
-
-  -- Registros únicos guardados como JSON: 'loja', 'sobre' e 'admin'.
-  CREATE TABLE IF NOT EXISTS config (
-    chave TEXT PRIMARY KEY,
-    valor TEXT NOT NULL
-  ) STRICT;
-
-  CREATE TABLE IF NOT EXISTS doces (
-    id TEXT PRIMARY KEY,
-    slug TEXT NOT NULL UNIQUE,
-    nome TEXT NOT NULL,
-    descricao TEXT NOT NULL DEFAULT '',
-    preco INTEGER NOT NULL CHECK (preco >= 0), -- em centavos
-    unidade TEXT NOT NULL,
-    emoji TEXT NOT NULL,
-    imagem TEXT NOT NULL DEFAULT '',
-    disponivel INTEGER NOT NULL DEFAULT 1
-  ) STRICT;
-
-  CREATE TABLE IF NOT EXISTS clientes (
-    id TEXT PRIMARY KEY,
-    email TEXT NOT NULL UNIQUE,
-    nome TEXT NOT NULL,
-    telefone TEXT NOT NULL,
-    cep TEXT NOT NULL DEFAULT '',
-    rua TEXT NOT NULL DEFAULT '',
-    numero TEXT NOT NULL DEFAULT '',
-    complemento TEXT NOT NULL DEFAULT '',
-    bairro TEXT NOT NULL DEFAULT '',
-    cidade TEXT NOT NULL DEFAULT '',
-    uf TEXT NOT NULL DEFAULT '',
-    salt TEXT NOT NULL,
-    hash TEXT NOT NULL,
-    criado_em TEXT NOT NULL
-  ) STRICT;
-
-  -- Nome, telefone e endereço são copiados para o pedido: mudar o cadastro depois não altera pedidos antigos.
-  CREATE TABLE IF NOT EXISTS pedidos (
-    numero INTEGER PRIMARY KEY AUTOINCREMENT, -- AUTOINCREMENT nunca reaproveita um número
-    id TEXT NOT NULL UNIQUE,
-    criado_em TEXT NOT NULL,
-    cliente_id TEXT REFERENCES clientes(id) ON DELETE SET NULL,
-    cliente_nome TEXT NOT NULL,
-    cliente_telefone TEXT NOT NULL,
-    entrega_tipo TEXT NOT NULL,
-    entrega_data TEXT NOT NULL,
-    entrega_endereco TEXT NOT NULL DEFAULT '',
-    observacoes TEXT NOT NULL DEFAULT '',
-    total INTEGER NOT NULL,
-    status TEXT NOT NULL,
-    demo INTEGER NOT NULL DEFAULT 0
-  ) STRICT;
-  CREATE INDEX IF NOT EXISTS pedidos_criado_em ON pedidos (criado_em);
-  CREATE INDEX IF NOT EXISTS pedidos_cliente ON pedidos (cliente_id);
-
-  -- Nome e preço também são copiados: o doce pode mudar de preço ou ser apagado.
-  CREATE TABLE IF NOT EXISTS pedido_itens (
-    pedido_numero INTEGER NOT NULL REFERENCES pedidos(numero) ON DELETE CASCADE,
-    doce_id TEXT,
-    nome TEXT NOT NULL,
-    preco_unit INTEGER NOT NULL,
-    quantidade INTEGER NOT NULL,
-    observacoes TEXT NOT NULL DEFAULT ''
-  ) STRICT;
-  CREATE INDEX IF NOT EXISTS itens_pedido ON pedido_itens (pedido_numero);
 `);
+
+// A estrutura das tabelas fica em migracoes/: aqui só são aplicadas as que ainda faltam neste banco.
+require('./migracoes').aplicar(db, { pastaBackups: path.join(DATA_DIR, 'backups') });
 
 // Toda consulta passa por aqui: o SQL é sempre texto fixo e os valores vão separados, como parâmetros (?).
 const preparadas = new Map();
@@ -110,7 +48,7 @@ function transacao(fn) {
   }
 }
 
-// ---------------------------------------------------------------- config (loja, sobre, admin)
+// ---------------------------------------------------------------- config (loja, sobre, tema...)
 
 function lerConfig(chave) {
   const linha = sql('SELECT valor FROM config WHERE chave = ?').get(chave);
@@ -122,31 +60,130 @@ function gravarConfig(chave, valor) {
     .run(chave, JSON.stringify(valor));
 }
 
-// ---------------------------------------------------------------- doces
+function apagarConfig(chave) {
+  sql('DELETE FROM config WHERE chave = ?').run(chave);
+}
 
-const paraDoce = (l) => l && {
+// ---------------------------------------------------------------- categorias
+
+const paraCategoria = (l) => l && { id: l.id, nome: l.nome };
+
+const listarCategorias = () => sql('SELECT * FROM categorias ORDER BY ordem, rowid').all().map(paraCategoria);
+const categoriaPorId = (id) => paraCategoria(sql('SELECT * FROM categorias WHERE id = ?').get(String(id)));
+
+// Cria (no fim da lista) ou troca o nome (pelo id).
+function salvarCategoria(c) {
+  sql(`INSERT INTO categorias (id, nome, ordem) VALUES (?, ?, (SELECT COALESCE(MAX(ordem), 0) + 1 FROM categorias))
+       ON CONFLICT (id) DO UPDATE SET nome = excluded.nome`).run(c.id, c.nome);
+}
+
+// `ids`: todas as categorias, na ordem em que devem aparecer.
+function ordenarCategorias(ids) {
+  transacao(() => ids.forEach((id, posicao) => sql('UPDATE categorias SET ordem = ? WHERE id = ?').run(posicao + 1, id)));
+}
+
+function apagarCategoria(id) {
+  sql('DELETE FROM categorias WHERE id = ?').run(id); // os produtos dela ficam sem categoria (ON DELETE SET NULL)
+}
+
+// ---------------------------------------------------------------- produtos
+
+const paraProduto = (l) => l && {
   id: l.id, slug: l.slug, nome: l.nome, descricao: l.descricao, preco: l.preco,
-  unidade: l.unidade, emoji: l.emoji, imagem: l.imagem, disponivel: Boolean(l.disponivel),
+  unidade: l.unidade, emoji: l.emoji, imagem: l.imagem, disponivel: Boolean(l.disponivel), categoriaId: l.categoria_id,
+  estoque: l.estoque, // null = a loja não controla o estoque deste produto
 };
+const paraVariacao = (l) => ({ id: l.id, nome: l.nome, preco: l.preco, estoque: l.estoque });
+const paraAdicional = (l) => ({ id: l.id, nome: l.nome, preco: l.preco });
 
-function listarDoces({ soDisponiveis = false } = {}) {
-  return sql(`SELECT * FROM doces ${soDisponiveis ? 'WHERE disponivel = 1' : ''} ORDER BY rowid`).all().map(paraDoce);
+// Junta a cada produto as variações e os adicionais dele, na ordem definida pela loja.
+// Aqui vem tudo o que está gravado; o que aparece conforme os recursos ligados é decidido em src/catalogo.js.
+function comOpcoes(produtos) {
+  if (!produtos.length) return produtos;
+  // Um produto só: busca as opções dele. Vários: uma consulta por tabela, em vez de uma por produto.
+  const filtro = produtos.length === 1 ? 'WHERE produto_id = ?' : '';
+  const parametros = produtos.length === 1 ? [produtos[0].id] : [];
+  const agrupar = (tabela, converter) => {
+    const grupos = new Map();
+    for (const l of sql(`SELECT * FROM ${tabela} ${filtro} ORDER BY ordem`).all(...parametros)) {
+      if (!grupos.has(l.produto_id)) grupos.set(l.produto_id, []);
+      grupos.get(l.produto_id).push(converter(l));
+    }
+    return grupos;
+  };
+  const variacoes = agrupar('produto_variacoes', paraVariacao);
+  const adicionais = agrupar('produto_adicionais', paraAdicional);
+  return produtos.map((p) => ({ ...p, variacoes: variacoes.get(p.id) || [], adicionais: adicionais.get(p.id) || [] }));
 }
-const docePorId = (id) => paraDoce(sql('SELECT * FROM doces WHERE id = ?').get(String(id)));
-const docePorSlug = (slug) => paraDoce(sql('SELECT * FROM doces WHERE slug = ?').get(String(slug)));
+const umProduto = (linha) => (linha ? comOpcoes([paraProduto(linha)])[0] : undefined);
 
-// Cria ou atualiza (pelo id).
-function salvarDoce(d) {
-  sql(`INSERT INTO doces (id, slug, nome, descricao, preco, unidade, emoji, imagem, disponivel)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (id) DO UPDATE SET slug = excluded.slug, nome = excluded.nome, descricao = excluded.descricao,
-         preco = excluded.preco, unidade = excluded.unidade, emoji = excluded.emoji, imagem = excluded.imagem,
-         disponivel = excluded.disponivel`)
-    .run(d.id, d.slug, d.nome, d.descricao, d.preco, d.unidade, d.emoji, d.imagem, d.disponivel ? 1 : 0);
+function listarProdutos({ soDisponiveis = false } = {}) {
+  return comOpcoes(sql(`SELECT * FROM produtos ${soDisponiveis ? 'WHERE disponivel = 1' : ''} ORDER BY rowid`).all().map(paraProduto));
+}
+const produtoPorId = (id) => umProduto(sql('SELECT * FROM produtos WHERE id = ?').get(String(id)));
+const produtoPorSlug = (slug) => umProduto(sql('SELECT * FROM produtos WHERE slug = ?').get(String(slug)));
+
+// Cria ou atualiza (pelo id), com as variações e os adicionais: os que não vierem na lista são apagados.
+function salvarProduto(d) {
+  transacao(() => {
+    sql(`INSERT INTO produtos (id, slug, nome, descricao, preco, unidade, emoji, imagem, disponivel, categoria_id, estoque)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET slug = excluded.slug, nome = excluded.nome, descricao = excluded.descricao,
+           preco = excluded.preco, unidade = excluded.unidade, emoji = excluded.emoji, imagem = excluded.imagem,
+           disponivel = excluded.disponivel, categoria_id = excluded.categoria_id, estoque = excluded.estoque`)
+      .run(d.id, d.slug, d.nome, d.descricao, d.preco, d.unidade, d.emoji, d.imagem, d.disponivel ? 1 : 0, d.categoriaId || null, d.estoque ?? null);
+
+    const variacoes = d.variacoes || [];
+    const adicionais = d.adicionais || [];
+    apagarOpcoesForaDaLista('produto_variacoes', d.id, variacoes);
+    apagarOpcoesForaDaLista('produto_adicionais', d.id, adicionais);
+    variacoes.forEach((v, ordem) => {
+      sql(`INSERT INTO produto_variacoes (id, produto_id, nome, preco, estoque, ordem) VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET nome = excluded.nome, preco = excluded.preco, estoque = excluded.estoque, ordem = excluded.ordem`)
+        .run(v.id, d.id, v.nome, v.preco, v.estoque ?? null, ordem);
+    });
+    adicionais.forEach((a, ordem) => {
+      sql(`INSERT INTO produto_adicionais (id, produto_id, nome, preco, ordem) VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET nome = excluded.nome, preco = excluded.preco, ordem = excluded.ordem`)
+        .run(a.id, d.id, a.nome, a.preco, ordem);
+    });
+  });
 }
 
-function apagarDoce(id) {
-  sql('DELETE FROM doces WHERE id = ?').run(id);
+function apagarOpcoesForaDaLista(tabela, produtoId, lista) {
+  const manter = new Set(lista.map((o) => o.id));
+  for (const { id } of sql(`SELECT id FROM ${tabela} WHERE produto_id = ?`).all(produtoId)) {
+    if (!manter.has(id)) sql(`DELETE FROM ${tabela} WHERE id = ?`).run(id);
+  }
+}
+
+// ---- estoque
+// O estoque de um item de pedido fica na variação escolhida, quando há uma; senão, no produto.
+const ondeFicaOEstoque = (item) => (item.variacaoId ? ['produto_variacoes', item.variacaoId] : ['produtos', item.produtoId]);
+
+// Tira a quantidade do item do estoque, só se houver o bastante (a conferência e a baixa são um comando só).
+// Devolve { baixou: true }, ou { baixou: false, restam }: `restam` é quanto há, ou null se o estoque não é controlado.
+function baixarEstoque(item) {
+  const [tabela, id] = ondeFicaOEstoque(item);
+  const { changes } = sql(`UPDATE ${tabela} SET estoque = estoque - ? WHERE id = ? AND estoque >= ?`).run(item.quantidade, id, item.quantidade);
+  if (Number(changes) > 0) return { baixou: true };
+  const linha = sql(`SELECT estoque FROM ${tabela} WHERE id = ?`).get(id);
+  return { baixou: false, restam: linha ? linha.estoque : null };
+}
+
+// Devolve a quantidade do item ao estoque (pedido cancelado). Não faz nada se o estoque deixou de ser controlado.
+function devolverEstoque(item) {
+  const [tabela, id] = ondeFicaOEstoque(item);
+  sql(`UPDATE ${tabela} SET estoque = estoque + ? WHERE id = ? AND estoque IS NOT NULL`).run(item.quantidade, id);
+}
+
+// Situação do estoque nos itens de um pedido: 1 = saiu do estoque, 2 = voltou (ver migração 004).
+function trocarSituacaoEstoque(pedidoNumero, de, para) {
+  sql('UPDATE pedido_itens SET estoque_situacao = ? WHERE pedido_numero = ? AND estoque_situacao = ?').run(para, pedidoNumero, de);
+}
+
+function apagarProduto(id) {
+  sql('DELETE FROM produtos WHERE id = ?').run(id);
 }
 
 // ---------------------------------------------------------------- clientes
@@ -187,8 +224,10 @@ function inserirPedido(p) {
         p.entrega.tipo, p.entrega.data, p.entrega.endereco || '', p.observacoes || '', p.total, p.status, p.demo ? 1 : 0);
     const numero = Number(lastInsertRowid);
     for (const i of p.itens) {
-      sql('INSERT INTO pedido_itens (pedido_numero, doce_id, nome, preco_unit, quantidade, observacoes) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(numero, i.doceId || null, i.nome, i.precoUnit, i.quantidade, i.observacoes || '');
+      sql(`INSERT INTO pedido_itens (pedido_numero, produto_id, nome, preco_unit, quantidade, observacoes,
+             variacao_id, variacao, adicionais, estoque_situacao) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(numero, i.produtoId || null, i.nome, i.precoUnit, i.quantidade, i.observacoes || '',
+          i.variacaoId || null, i.variacao || '', JSON.stringify(i.adicionais || []), i.estoqueSituacao || 0);
     }
     return numero;
   });
@@ -200,7 +239,10 @@ function buscarPedidos(filtro = '', parametros = []) {
   const linhasItens = sql(`SELECT i.* FROM pedido_itens i JOIN pedidos p ON p.numero = i.pedido_numero ${filtro} ORDER BY i.rowid`).all(...parametros);
   for (const i of linhasItens) {
     if (!itens.has(i.pedido_numero)) itens.set(i.pedido_numero, []);
-    itens.get(i.pedido_numero).push({ doceId: i.doce_id, nome: i.nome, precoUnit: i.preco_unit, quantidade: i.quantidade, observacoes: i.observacoes });
+    itens.get(i.pedido_numero).push({
+      produtoId: i.produto_id, nome: i.nome, precoUnit: i.preco_unit, quantidade: i.quantidade, observacoes: i.observacoes,
+      variacaoId: i.variacao_id, variacao: i.variacao, adicionais: JSON.parse(i.adicionais), estoqueSituacao: i.estoque_situacao,
+    });
   }
   return sql(`SELECT p.* FROM pedidos p ${filtro} ORDER BY p.criado_em, p.numero`).all(...parametros).map((p) => ({
     id: p.id, numero: p.numero, criadoEm: p.criado_em, clienteId: p.cliente_id,
@@ -217,7 +259,23 @@ function listarPedidos({ clienteId, desde } = {}) {
   return buscarPedidos();
 }
 
-const pedidoPorId = (id) => buscarPedidos('WHERE p.id = ?', [String(id)])[0] || null;
+// Uma página de pedidos, do mais novo para o mais antigo, e o total que casa com o filtro.
+// `status`: lista de status aceitos (omitir = todos); `clienteId`: só os pedidos de um cliente.
+function paginarPedidos({ status, clienteId, pagina = 1, porPagina }) {
+  const condicoes = [];
+  const parametros = [];
+  if (clienteId) { condicoes.push('p.cliente_id = ?'); parametros.push(clienteId); }
+  if (status) { condicoes.push(`p.status IN (${status.map(() => '?').join(', ')})`); parametros.push(...status); }
+  const filtro = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '';
+
+  const total = sql(`SELECT COUNT(*) AS n FROM pedidos p ${filtro}`).get(...parametros).n;
+  const numeros = sql(`SELECT p.numero FROM pedidos p ${filtro} ORDER BY p.criado_em DESC, p.numero DESC LIMIT ? OFFSET ?`)
+    .all(...parametros, porPagina, (pagina - 1) * porPagina).map((l) => l.numero);
+  if (!numeros.length) return { pedidos: [], total };
+  return { pedidos: buscarPedidos(`WHERE p.numero IN (${numeros.map(() => '?').join(', ')})`, numeros).reverse(), total };
+}
+
+const pedidoPorId =(id) => buscarPedidos('WHERE p.id = ?', [String(id)])[0] || null;
 
 function mudarStatusPedido(id, status) {
   sql('UPDATE pedidos SET status = ? WHERE id = ?').run(status, id);
@@ -231,26 +289,136 @@ function apagarPedidosDemo() {
   sql('DELETE FROM pedidos WHERE demo = 1').run(); // os itens vão junto (ON DELETE CASCADE)
 }
 
+// ---------------------------------------------------------------- equipe: perfis e usuários
+
+function perfisDe(linhas) {
+  return linhas.map((l) => ({
+    id: l.id, nome: l.nome, sistema: Boolean(l.sistema),
+    permissoes: sql('SELECT permissao FROM perfil_permissoes WHERE perfil_id = ? ORDER BY permissao').all(l.id).map((p) => p.permissao),
+  }));
+}
+const listarPerfis = () => perfisDe(sql('SELECT * FROM perfis ORDER BY sistema DESC, nome').all());
+const perfilPorId = (id) => perfisDe(sql('SELECT * FROM perfis WHERE id = ?').all(String(id)))[0] || null;
+const perfilDeSistema = () => perfisDe(sql('SELECT * FROM perfis WHERE sistema = 1 ORDER BY rowid LIMIT 1').all())[0] || null;
+const usuariosNoPerfil = (id) => sql('SELECT COUNT(*) AS n FROM usuarios WHERE perfil_id = ?').get(id).n;
+
+// Cria ou atualiza (pelo id) o nome e a lista de permissões. Nunca muda o campo `sistema`.
+function salvarPerfil(p) {
+  transacao(() => {
+    sql('INSERT INTO perfis (id, nome, sistema) VALUES (?, ?, 0) ON CONFLICT (id) DO UPDATE SET nome = excluded.nome').run(p.id, p.nome);
+    sql('DELETE FROM perfil_permissoes WHERE perfil_id = ?').run(p.id);
+    for (const permissao of p.permissoes) sql('INSERT INTO perfil_permissoes (perfil_id, permissao) VALUES (?, ?)').run(p.id, permissao);
+  });
+}
+
+function apagarPerfil(id) {
+  sql('DELETE FROM perfis WHERE id = ? AND sistema = 0').run(id);
+}
+
+function usuariosDe(linhas) {
+  return linhas.map((l) => {
+    const ajustes = sql('SELECT permissao, efeito FROM usuario_permissoes WHERE usuario_id = ? ORDER BY permissao').all(l.id);
+    return {
+      id: l.id, usuario: l.usuario, nome: l.nome, perfilId: l.perfil_id, salt: l.salt, hash: l.hash,
+      ativo: Boolean(l.ativo), senhaInicial: Boolean(l.senha_inicial), criadoEm: l.criado_em,
+      // Ajustes individuais sobre o perfil (ver src/permissoes.js).
+      ajustes: {
+        conceder: ajustes.filter((a) => a.efeito === 'conceder').map((a) => a.permissao),
+        negar: ajustes.filter((a) => a.efeito === 'negar').map((a) => a.permissao),
+      },
+    };
+  });
+}
+const listarUsuarios = () => usuariosDe(sql('SELECT * FROM usuarios ORDER BY ativo DESC, nome, rowid').all());
+const usuarioPorId = (id) => usuariosDe(sql('SELECT * FROM usuarios WHERE id = ?').all(String(id)))[0] || null;
+const usuarioPorLogin = (login) => usuariosDe(sql('SELECT * FROM usuarios WHERE usuario = ?').all(String(login)))[0] || null;
+const contarUsuarios = () => sql('SELECT COUNT(*) AS n FROM usuarios').get().n;
+// Quantas pessoas ativas têm o perfil Administrador: a loja nunca pode ficar sem nenhuma.
+const contarAdministradoresAtivos = () =>
+  sql('SELECT COUNT(*) AS n FROM usuarios u JOIN perfis p ON p.id = u.perfil_id WHERE u.ativo = 1 AND p.sistema = 1').get().n;
+
+// Cria ou atualiza (pelo id), com os ajustes individuais.
+function salvarUsuario(u) {
+  transacao(() => {
+    sql(`INSERT INTO usuarios (id, usuario, nome, perfil_id, salt, hash, ativo, senha_inicial, criado_em)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET usuario = excluded.usuario, nome = excluded.nome, perfil_id = excluded.perfil_id,
+           salt = excluded.salt, hash = excluded.hash, ativo = excluded.ativo, senha_inicial = excluded.senha_inicial`)
+      .run(u.id, u.usuario, u.nome, u.perfilId, u.salt, u.hash, u.ativo ? 1 : 0, u.senhaInicial ? 1 : 0, u.criadoEm);
+    sql('DELETE FROM usuario_permissoes WHERE usuario_id = ?').run(u.id);
+    const ajustes = u.ajustes || { conceder: [], negar: [] };
+    for (const efeito of ['conceder', 'negar']) {
+      for (const permissao of ajustes[efeito]) sql('INSERT INTO usuario_permissoes (usuario_id, permissao, efeito) VALUES (?, ?, ?)').run(u.id, permissao, efeito);
+    }
+  });
+}
+
+// ---------------------------------------------------------------- sessões de login
+// `tokenHash` é o SHA-256 do token que está no cookie (ver src/sessao.js): o token em si nunca é gravado.
+
+function criarSessao({ tokenHash, usuarioId = null, clienteId = null, validade }) {
+  sql('INSERT INTO sessoes (token_hash, tipo, usuario_id, cliente_id, criada_em, validade) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(tokenHash, usuarioId ? 'usuario' : 'cliente', usuarioId, clienteId, new Date().toISOString(), validade);
+}
+
+function sessaoPorHash(tokenHash) {
+  const l = sql('SELECT * FROM sessoes WHERE token_hash = ?').get(String(tokenHash));
+  return l ? { tipo: l.tipo, usuarioId: l.usuario_id, clienteId: l.cliente_id, validade: l.validade } : null;
+}
+
+const apagarSessao = (tokenHash) => sql('DELETE FROM sessoes WHERE token_hash = ?').run(String(tokenHash));
+const apagarSessoesVencidas = (agora = Date.now()) => sql('DELETE FROM sessoes WHERE validade < ?').run(agora);
+// Derruba todas as sessões de uma pessoa, menos (se informada) a de `mantendo`.
+const apagarSessoesDoCliente = (clienteId) => sql('DELETE FROM sessoes WHERE cliente_id = ?').run(clienteId);
+const apagarSessoesDoUsuario = (usuarioId, mantendo = '') => sql('DELETE FROM sessoes WHERE usuario_id = ? AND token_hash <> ?').run(usuarioId, mantendo);
+
+// ---------------------------------------------------------------- registro de atividades (auditoria)
+// Só inserção e leitura: o banco recusa UPDATE e DELETE nesta tabela (migração 006).
+
+function inserirAuditoria(r) {
+  sql('INSERT INTO auditoria (em, usuario_id, usuario_login, usuario_nome, acao, alvo, detalhes, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(new Date().toISOString(), r.usuarioId || null, r.usuarioLogin, r.usuarioNome, r.acao, r.alvo || '', JSON.stringify(r.detalhes || {}), r.ip || '');
+}
+
+// Uma página do registro, do mais recente para o mais antigo, e o total de linhas.
+function paginarAuditoria({ pagina = 1, porPagina }) {
+  const total = sql('SELECT COUNT(*) AS n FROM auditoria').get().n;
+  const itens = sql('SELECT * FROM auditoria ORDER BY id DESC LIMIT ? OFFSET ?').all(porPagina, (pagina - 1) * porPagina).map((l) => ({
+    id: l.id, em: l.em, usuario: l.usuario_login, nome: l.usuario_nome, acao: l.acao, alvo: l.alvo, detalhes: JSON.parse(l.detalhes), ip: l.ip,
+  }));
+  return { itens, total };
+}
+
 // ---------------------------------------------------------------- migração do db.json antigo
 // Acontece sozinha, uma única vez: se existe data/db.json e o banco novo está vazio, copia tudo
 // e renomeia o arquivo antigo para db.json.migrado (fica guardado como cópia de segurança).
 
 function importarJsonAntigo() {
-  if (lerConfig('admin') || !fs.existsSync(JSON_ANTIGO)) return;
+  if (contarUsuarios() || !fs.existsSync(JSON_ANTIGO)) return;
   const antigo = JSON.parse(fs.readFileSync(JSON_ANTIGO, 'utf8'));
   const clientes = antigo.clientes || [];
   const pedidos = antigo.pedidos || [];
 
   transacao(() => {
-    for (const chave of ['loja', 'sobre', 'admin']) gravarConfig(chave, antigo[chave]);
-    for (const d of antigo.doces || []) salvarDoce(d);
+    for (const chave of ['loja', 'sobre']) gravarConfig(chave, antigo[chave]);
+    // A conta de acesso do arquivo antigo vira o primeiro usuário, com o perfil Administrador.
+    const admin = antigo.admin || {};
+    salvarUsuario({
+      id: require('node:crypto').randomUUID(), usuario: String(admin.usuario || 'confeiteira'), nome: 'Administrador',
+      perfilId: perfilDeSistema().id, salt: String(admin.salt || ''), hash: String(admin.hash || ''),
+      ativo: true, senhaInicial: Boolean(admin.senhaInicial), criadoEm: new Date().toISOString(),
+    });
+    for (const d of antigo.doces || []) salvarProduto(d); // no arquivo antigo a lista se chama "doces"
     for (const c of clientes) {
       // Nos primeiros bancos o endereço era um texto só: ele vai para o campo "rua".
       const endereco = c.endereco && typeof c.endereco === 'object' ? c.endereco : { rua: String(c.endereco || '') };
       salvarCliente({ ...c, endereco, criadoEm: c.criadoEm || new Date().toISOString() });
     }
     const idsClientes = new Set(clientes.map((c) => c.id));
-    for (const p of pedidos) inserirPedido({ ...p, clienteId: idsClientes.has(p.clienteId) ? p.clienteId : null });
+    for (const p of pedidos) {
+      const itens = (p.itens || []).map((i) => ({ ...i, produtoId: i.produtoId || i.doceId })); // idem: "doceId"
+      inserirPedido({ ...p, itens, clienteId: idsClientes.has(p.clienteId) ? p.clienteId : null });
+    }
 
     // A numeração continua de onde parou, mesmo que os últimos pedidos tenham sido apagados.
     const ultimo = Math.max((antigo.proximoNumero || 1) - 1, ...pedidos.map((p) => p.numero));
@@ -259,14 +427,20 @@ function importarJsonAntigo() {
   });
 
   fs.renameSync(JSON_ANTIGO, JSON_ANTIGO + '.migrado');
-  console.log(`Dados migrados de db.json para loja.db: ${(antigo.doces || []).length} doces, ${clientes.length} clientes, ${pedidos.length} pedidos.`);
+  console.log(`Dados migrados de db.json para loja.db: ${(antigo.doces || []).length} produtos, ${clientes.length} clientes, ${pedidos.length} pedidos.`);
   console.log('O arquivo antigo ficou guardado como data/db.json.migrado.');
 }
 importarJsonAntigo();
 
 module.exports = {
-  DATA_DIR, ARQUIVO, transacao, lerConfig, gravarConfig,
-  listarDoces, docePorId, docePorSlug, salvarDoce, apagarDoce,
+  DATA_DIR, ARQUIVO, transacao, lerConfig, gravarConfig, apagarConfig,
+  listarCategorias, categoriaPorId, salvarCategoria, ordenarCategorias, apagarCategoria,
+  listarProdutos, produtoPorId, produtoPorSlug, salvarProduto, apagarProduto,
+  baixarEstoque, devolverEstoque, trocarSituacaoEstoque,
   listarClientes, clientePorId, clientePorEmail, salvarCliente,
-  inserirPedido, listarPedidos, pedidoPorId, mudarStatusPedido, contarPedidosComStatus, apagarPedidosDemo,
+  inserirPedido, listarPedidos, paginarPedidos, pedidoPorId, mudarStatusPedido, contarPedidosComStatus, apagarPedidosDemo,
+  listarPerfis, perfilPorId, perfilDeSistema, usuariosNoPerfil, salvarPerfil, apagarPerfil,
+  listarUsuarios, usuarioPorId, usuarioPorLogin, contarUsuarios, contarAdministradoresAtivos, salvarUsuario,
+  inserirAuditoria, paginarAuditoria,
+  criarSessao, sessaoPorHash, apagarSessao, apagarSessoesVencidas, apagarSessoesDoCliente, apagarSessoesDoUsuario,
 };

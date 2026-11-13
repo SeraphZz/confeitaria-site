@@ -1,5 +1,5 @@
 'use strict';
-// Login único: clientes entram com e-mail; a confeiteira, com o usuário dela.
+// Login único: clientes entram com e-mail; a loja, com o usuário dela.
 
 App.pronto.then(({ admin, cliente }) => {
   // ?voltar=carrinho traz o cliente de volta ao carrinho depois de entrar.

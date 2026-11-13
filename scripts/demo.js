@@ -5,8 +5,8 @@
 const crypto = require('node:crypto');
 const banco = require('../banco');
 
-const doces = banco.listarDoces();
-if (!doces.length) {
+const produtos = banco.listarProdutos();
+if (!produtos.length) {
   console.error('Rode o servidor uma vez antes (node server.js) para criar o banco.');
   process.exit(1);
 }
@@ -22,8 +22,8 @@ banco.transacao(() => {
     const criado = new Date(Date.now() - Math.random() * 90 * 86400000);
     const idade = (Date.now() - criado) / 86400000;
     const itens = Array.from({ length: 1 + Math.floor(Math.random() * 3) }, () => {
-      const doce = sortear(doces);
-      return { doceId: doce.id, nome: doce.nome, precoUnit: doce.preco, quantidade: doce.preco < 2000 ? 6 + Math.floor(Math.random() * 30) : 1, observacoes: '' };
+      const produto = sortear(produtos);
+      return { produtoId: produto.id, nome: produto.nome, precoUnit: produto.preco, quantidade: produto.preco < 2000 ? 6 + Math.floor(Math.random() * 30) : 1, observacoes: '' };
     });
     const entrega = new Date(criado.getTime() + 3 * 86400000);
     banco.inserirPedido({

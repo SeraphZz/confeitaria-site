@@ -1,6 +1,6 @@
 'use strict';
-// Conteúdo inicial do site. Usado apenas na primeira execução, quando data/db.json ainda não existe.
-// Depois disso, tudo é editado pelo próprio site (logada como confeiteira).
+// Conteúdo inicial do site. Usado apenas na primeira execução, quando o banco ainda está vazio.
+// Depois disso, tudo é editado pelo próprio site (com a loja logada).
 
 module.exports = {
   loja: {
@@ -24,7 +24,9 @@ module.exports = {
       { ano: '2021', titulo: 'Ateliê próprio', texto: 'Montei meu ateliê e ampliei o cardápio com tortas, bolos e macarons.' },
     ],
   },
-  doces: [
+  // Como a loja chama o que vende, e o ícone de quem ainda não tem foto.
+  catalogo: { nomeSingular: 'Doce', nomePlural: 'Doces', emojiPadrao: '🧁' },
+  produtos: [
     { nome: 'Brigadeiro gourmet', preco: 450, unidade: 'unidade', emoji: '🍫', descricao: 'Brigadeiro de chocolate belga, enrolado à mão e finalizado com granulado de chocolate ao leite.' },
     { nome: 'Bolo de cenoura com chocolate', preco: 8500, unidade: 'bolo (aprox. 1,2 kg)', emoji: '🥕', descricao: 'Massa fofinha de cenoura com cobertura generosa de brigadeiro cremoso. Serve cerca de 12 fatias.' },
     { nome: 'Torta de limão', preco: 9500, unidade: 'torta (22 cm)', emoji: '🍋', descricao: 'Base crocante amanteigada, creme de limão siciliano e merengue maçaricado.' },

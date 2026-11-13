@@ -3,9 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Painel da confeiteira</title>
+  <title>Painel</title>
   <link rel="stylesheet" href="/css/bootstrap.min.css">
   <link rel="stylesheet" href="/css/site.css">
+  <link rel="stylesheet" href="/tema.css">
+  <link rel="icon" href="/favicon.ico">
 </head>
 <body>
   <div id="cabecalho"></div>
@@ -19,7 +21,10 @@
         <button type="button" role="tab" data-aba="resumo">Resumo</button>
         <button type="button" role="tab" data-aba="pedidos">Pedidos</button>
         <button type="button" role="tab" data-aba="clientes">Clientes</button>
-        <button type="button" role="tab" data-aba="doces">Doces</button>
+        <button type="button" role="tab" data-aba="produtos">Produtos</button>
+        <button type="button" role="tab" data-aba="aparencia">Aparência</button>
+        <button type="button" role="tab" data-aba="equipe">Equipe</button>
+        <button type="button" role="tab" data-aba="atividade">Atividade</button>
         <button type="button" role="tab" data-aba="config">Configurações</button>
       </div>
 
@@ -43,9 +48,9 @@
           </div>
           <div class="col-12 lg:col-5">
             <div class="painel">
-              <h2 class="fs-lg mb-4">Doces que mais renderam</h2>
-              <div class="grafico"><canvas id="grafico-doces" role="img" aria-label="Gráfico de barras da receita por doce"></canvas></div>
-              <details class="mt-4"><summary class="suave fs-sm">Ver em tabela</summary><div id="tabela-doces" class="mt-3"></div></details>
+              <h2 class="fs-lg mb-4" id="titulo-grafico-produtos">Produtos que mais renderam</h2>
+              <div class="grafico"><canvas id="grafico-produtos" role="img" aria-label="Gráfico de barras da receita por produto"></canvas></div>
+              <details class="mt-4"><summary class="suave fs-sm">Ver em tabela</summary><div id="tabela-produtos" class="mt-3"></div></details>
             </div>
           </div>
         </div>
@@ -57,24 +62,137 @@
           <select id="filtro-status" class="form-control" style="max-width: 14rem"></select>
         </div>
         <div id="lista-pedidos"></div>
+        <button type="button" class="btn btn-outline theme-primary" id="mais-pedidos" hidden>Carregar mais pedidos</button>
       </section>
 
       <section id="aba-clientes" hidden>
         <p class="suave fs-sm">Pedidos agrupados por pessoa, de quem mais comprou para quem menos comprou. Toque em uma pessoa para ver os pedidos dela. Quem pediu sem cadastro é agrupado pelo telefone; cancelados não entram no total.</p>
         <input id="busca-cliente" class="form-control mb-5" type="search" placeholder="Buscar por nome, telefone ou e-mail" aria-label="Buscar cliente" style="max-width: 24rem">
         <div id="lista-clientes"></div>
+        <button type="button" class="btn btn-outline theme-primary" id="mais-clientes" hidden>Carregar mais clientes</button>
       </section>
 
-      <section id="aba-doces" hidden>
-        <form class="painel mb-5" id="form-novo-doce">
-          <h2 class="fs-lg mb-4">Novo doce</h2>
+      <section id="aba-produtos" hidden>
+        <form class="painel mb-5" id="form-novo-produto">
+          <h2 class="fs-lg mb-4" id="titulo-novo-produto">Adicionar produto</h2>
           <div class="row g-4 align-items-end">
             <div class="col-12 md:col-6"><label class="form-label" for="novo-nome">Nome</label><input class="form-control" id="novo-nome" maxlength="80" required></div>
             <div class="col-6 md:col-3"><label class="form-label" for="novo-preco">Preço (R$)</label><input class="form-control" id="novo-preco" inputmode="decimal" placeholder="0,00" required></div>
             <div class="col-6 md:col-3"><button class="btn btn-solid theme-primary w-100">Criar e editar</button></div>
           </div>
         </form>
-        <div class="painel" id="lista-doces"></div>
+        <div class="painel mb-5" id="lista-produtos"></div>
+        <div class="painel">
+          <h2 class="fs-lg mb-2">Categorias</h2>
+          <p class="suave fs-sm mb-4">Opcional. Com categorias, a página inicial separa os itens em grupos, na ordem desta lista, e o cliente pode filtrar por grupo. Sem nenhuma, tudo aparece em uma lista só. Para colocar um item em uma categoria, use a lista acima.</p>
+          <div id="lista-categorias" class="mb-4"></div>
+          <form id="form-nova-categoria" class="row g-4 align-items-end">
+            <div class="col-8 md:col-6"><label class="form-label" for="nova-categoria">Nova categoria</label><input class="form-control" id="nova-categoria" maxlength="40" required placeholder="Ex.: Novidades, Bebidas, Promoções"></div>
+            <div class="col-4 md:col-3"><button class="btn btn-outline theme-primary w-100">Adicionar</button></div>
+          </form>
+        </div>
+      </section>
+
+      <section id="aba-aparencia" hidden>
+        <div class="painel-edicao mb-5" id="tema-pendente" role="status" hidden>
+          <h2 class="fs-lg mb-2">Você tem alterações não publicadas</h2>
+          <p class="mb-4">Você já está vendo o site com a nova aparência, em todas as páginas. <strong>Seus clientes ainda veem a versão publicada.</strong> Navegue à vontade para conferir e, quando estiver do seu gosto, publique.</p>
+          <div class="d-flex flex-wrap gap-3">
+            <button type="button" class="btn btn-solid theme-primary" id="tema-publicar">Publicar para os clientes</button>
+            <a class="btn btn-outline theme-primary" href="/">Ver a página inicial</a>
+            <button type="button" class="btn btn-outline theme-primary" id="tema-descartar">Descartar alterações</button>
+          </div>
+        </div>
+        <p class="suave mb-5" id="tema-em-dia">O que você alterar aqui fica primeiro só para você: dá para ver como o site fica antes de publicar para os clientes.</p>
+        <div class="row g-5">
+          <div class="col-12 lg:col-5">
+            <form class="painel" id="form-tema">
+              <h2 class="fs-lg mb-4">Cores e letras</h2>
+              <div class="mb-5">
+                <label class="form-label" for="tema-corPrincipal">Cor principal</label>
+                <p class="suave fs-sm mb-2">Botões, links e preços.</p>
+                <div class="amostra-cor">
+                  <input type="color" id="tema-corPrincipal">
+                  <span class="suave fs-sm" id="tema-corPrincipal-nota"></span>
+                  <button type="button" class="botao-texto" id="tema-corPrincipal-padrao">Voltar à cor padrão</button>
+                </div>
+              </div>
+              <div class="mb-5">
+                <label class="form-label" for="tema-corSecundaria">Cor secundária</label>
+                <p class="suave fs-sm mb-2">Fundo do cabeçalho e do rodapé. Pode ser clara ou escura: o texto se ajusta.</p>
+                <div class="amostra-cor">
+                  <input type="color" id="tema-corSecundaria">
+                  <span class="suave fs-sm" id="tema-corSecundaria-nota"></span>
+                  <button type="button" class="botao-texto" id="tema-corSecundaria-padrao">Voltar à cor padrão</button>
+                </div>
+              </div>
+              <div class="mb-5">
+                <label class="form-label" for="tema-fonteTitulos">Letra dos títulos</label>
+                <select class="form-control" id="tema-fonteTitulos"></select>
+              </div>
+              <button class="btn btn-solid theme-primary">Ver como fica</button>
+            </form>
+          </div>
+          <div class="col-12 lg:col-7">
+            <div class="painel">
+              <h2 class="fs-lg mb-2">Imagens</h2>
+              <p class="suave fs-sm mb-4">JPG, PNG ou WebP. A imagem entra na prévia assim que você escolhe o arquivo; os clientes só veem depois de publicar.</p>
+              <div class="row g-5">
+              <div class="col-12 md:col-4">
+                <h3 class="fs-md mb-1">Logotipo</h3>
+                <p class="suave fs-sm mb-3">Aparece no topo, ao lado do nome. Prefira PNG com fundo transparente.</p>
+                <div class="previa-imagem mb-3" id="previa-logo"></div>
+                <label class="form-label" for="arquivo-logo">Enviar imagem</label>
+                <input class="form-control" id="arquivo-logo" type="file" accept="image/jpeg,image/png,image/webp">
+                <button type="button" class="botao-texto mt-2" id="remover-logo" hidden>Remover</button>
+              </div>
+              <div class="col-12 md:col-4">
+                <h3 class="fs-md mb-1">Ícone da aba</h3>
+                <p class="suave fs-sm mb-3">O pequeno ícone na aba do navegador. Use uma imagem quadrada.</p>
+                <div class="previa-imagem mb-3" id="previa-favicon"></div>
+                <label class="form-label" for="arquivo-favicon">Enviar imagem</label>
+                <input class="form-control" id="arquivo-favicon" type="file" accept="image/jpeg,image/png,image/webp">
+                <button type="button" class="botao-texto mt-2" id="remover-favicon" hidden>Remover</button>
+              </div>
+              <div class="col-12 md:col-4">
+                <h3 class="fs-md mb-1">Banner</h3>
+                <p class="suave fs-sm mb-3">Foto de fundo do topo da página inicial.</p>
+                <div class="previa-imagem mb-3" id="previa-banner"></div>
+                <label class="form-label" for="arquivo-banner">Enviar imagem</label>
+                <input class="form-control" id="arquivo-banner" type="file" accept="image/jpeg,image/png,image/webp">
+                <button type="button" class="botao-texto mt-2" id="remover-banner" hidden>Remover</button>
+              </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="aba-equipe" hidden>
+        <p class="suave mb-5">Cada pessoa da equipe entra com o próprio usuário e senha e vê só o que o perfil dela permite. Você só consegue dar a alguém as permissões que você mesmo tem.</p>
+        <div class="painel mb-5">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+            <h2 class="fs-lg mb-0">Pessoas</h2>
+            <button type="button" class="btn btn-solid theme-primary btn-sm" id="nova-pessoa">+ Adicionar pessoa</button>
+          </div>
+          <div id="lista-pessoas"></div>
+          <form class="painel-edicao mt-4" id="form-pessoa" hidden></form>
+        </div>
+        <div class="painel">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-2">
+            <h2 class="fs-lg mb-0">Perfis</h2>
+            <button type="button" class="btn btn-outline theme-primary btn-sm" id="novo-perfil">+ Criar perfil</button>
+          </div>
+          <p class="suave fs-sm mb-4">Um perfil é um conjunto de permissões (ex.: Atendimento, Catálogo). O Administrador é fixo e pode tudo.</p>
+          <div id="lista-perfis"></div>
+          <form class="painel-edicao mt-4" id="form-perfil" hidden></form>
+        </div>
+      </section>
+
+      <section id="aba-atividade" hidden>
+        <p class="suave fs-sm">O que a equipe fez no painel, do mais recente para o mais antigo: quem entrou, e tudo o que foi criado, alterado ou excluído. Este registro não pode ser alterado nem apagado.</p>
+        <div class="painel mb-4" style="overflow-x: auto" id="lista-atividade"></div>
+        <button type="button" class="btn btn-outline theme-primary" id="mais-atividade" hidden>Carregar mais</button>
       </section>
 
       <section id="aba-config" hidden>
@@ -87,7 +205,103 @@
               <div class="mb-4"><label class="form-label" for="loja-whatsapp">WhatsApp com DDD</label><input class="form-control" id="loja-whatsapp" type="tel" data-mascara="telefone" inputmode="numeric" placeholder="(11) 99999-9999"></div>
               <div class="mb-4"><label class="form-label" for="loja-instagram">Instagram</label><input class="form-control" id="loja-instagram" maxlength="40"></div>
               <div class="mb-4"><label class="form-label" for="loja-email">E-mail</label><input class="form-control" id="loja-email" type="email" maxlength="120"></div>
+              <div class="mb-4"><label class="form-label" for="loja-endereco">Endereço (rua, número e bairro)</label><input class="form-control" id="loja-endereco" maxlength="160" placeholder="Deixe vazio se não quiser divulgar"></div>
               <div class="mb-5"><label class="form-label" for="loja-cidade">Cidade</label><input class="form-control" id="loja-cidade" maxlength="80"></div>
+              <button class="btn btn-solid theme-primary">Salvar</button>
+            </form>
+            <form class="painel mt-5" id="form-atendimento">
+              <h2 class="fs-lg mb-2">Horários de funcionamento</h2>
+              <p class="suave fs-sm mb-4">Marque os dias em que a loja abre. Os dois últimos campos são para quem fecha no meio do dia e reabre depois (ex.: almoço e jantar); se não for o seu caso, deixe vazios.</p>
+              <div style="overflow-x: auto">
+              <table class="tabela-simples tabela-horarios mb-4">
+                <thead><tr><th>Dia</th><th>Abre</th><th>Fecha</th><th>Reabre</th><th>Fecha</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><label class="d-flex gap-2 align-items-center"><input type="checkbox" id="dia-1-aberto"> Segunda</label></td>
+                    <td><input class="form-control" type="time" id="dia-1-abre" aria-label="Segunda: abre às"></td>
+                    <td><input class="form-control" type="time" id="dia-1-fecha" aria-label="Segunda: fecha às"></td>
+                    <td><input class="form-control" type="time" id="dia-1-abre2" aria-label="Segunda: reabre às (opcional)"></td>
+                    <td><input class="form-control" type="time" id="dia-1-fecha2" aria-label="Segunda: fecha de novo às (opcional)"></td>
+                  </tr>
+                  <tr>
+                    <td><label class="d-flex gap-2 align-items-center"><input type="checkbox" id="dia-2-aberto"> Terça</label></td>
+                    <td><input class="form-control" type="time" id="dia-2-abre" aria-label="Terça: abre às"></td>
+                    <td><input class="form-control" type="time" id="dia-2-fecha" aria-label="Terça: fecha às"></td>
+                    <td><input class="form-control" type="time" id="dia-2-abre2" aria-label="Terça: reabre às (opcional)"></td>
+                    <td><input class="form-control" type="time" id="dia-2-fecha2" aria-label="Terça: fecha de novo às (opcional)"></td>
+                  </tr>
+                  <tr>
+                    <td><label class="d-flex gap-2 align-items-center"><input type="checkbox" id="dia-3-aberto"> Quarta</label></td>
+                    <td><input class="form-control" type="time" id="dia-3-abre" aria-label="Quarta: abre às"></td>
+                    <td><input class="form-control" type="time" id="dia-3-fecha" aria-label="Quarta: fecha às"></td>
+                    <td><input class="form-control" type="time" id="dia-3-abre2" aria-label="Quarta: reabre às (opcional)"></td>
+                    <td><input class="form-control" type="time" id="dia-3-fecha2" aria-label="Quarta: fecha de novo às (opcional)"></td>
+                  </tr>
+                  <tr>
+                    <td><label class="d-flex gap-2 align-items-center"><input type="checkbox" id="dia-4-aberto"> Quinta</label></td>
+                    <td><input class="form-control" type="time" id="dia-4-abre" aria-label="Quinta: abre às"></td>
+                    <td><input class="form-control" type="time" id="dia-4-fecha" aria-label="Quinta: fecha às"></td>
+                    <td><input class="form-control" type="time" id="dia-4-abre2" aria-label="Quinta: reabre às (opcional)"></td>
+                    <td><input class="form-control" type="time" id="dia-4-fecha2" aria-label="Quinta: fecha de novo às (opcional)"></td>
+                  </tr>
+                  <tr>
+                    <td><label class="d-flex gap-2 align-items-center"><input type="checkbox" id="dia-5-aberto"> Sexta</label></td>
+                    <td><input class="form-control" type="time" id="dia-5-abre" aria-label="Sexta: abre às"></td>
+                    <td><input class="form-control" type="time" id="dia-5-fecha" aria-label="Sexta: fecha às"></td>
+                    <td><input class="form-control" type="time" id="dia-5-abre2" aria-label="Sexta: reabre às (opcional)"></td>
+                    <td><input class="form-control" type="time" id="dia-5-fecha2" aria-label="Sexta: fecha de novo às (opcional)"></td>
+                  </tr>
+                  <tr>
+                    <td><label class="d-flex gap-2 align-items-center"><input type="checkbox" id="dia-6-aberto"> Sábado</label></td>
+                    <td><input class="form-control" type="time" id="dia-6-abre" aria-label="Sábado: abre às"></td>
+                    <td><input class="form-control" type="time" id="dia-6-fecha" aria-label="Sábado: fecha às"></td>
+                    <td><input class="form-control" type="time" id="dia-6-abre2" aria-label="Sábado: reabre às (opcional)"></td>
+                    <td><input class="form-control" type="time" id="dia-6-fecha2" aria-label="Sábado: fecha de novo às (opcional)"></td>
+                  </tr>
+                  <tr>
+                    <td><label class="d-flex gap-2 align-items-center"><input type="checkbox" id="dia-0-aberto"> Domingo</label></td>
+                    <td><input class="form-control" type="time" id="dia-0-abre" aria-label="Domingo: abre às"></td>
+                    <td><input class="form-control" type="time" id="dia-0-fecha" aria-label="Domingo: fecha às"></td>
+                    <td><input class="form-control" type="time" id="dia-0-abre2" aria-label="Domingo: reabre às (opcional)"></td>
+                    <td><input class="form-control" type="time" id="dia-0-fecha2" aria-label="Domingo: fecha de novo às (opcional)"></td>
+                  </tr>
+                </tbody>
+              </table>
+              </div>
+              <div class="mb-4"><label class="form-label" for="atendimento-observacaoHorarios">Observação (opcional)</label><input class="form-control" id="atendimento-observacaoHorarios" maxlength="160" placeholder="Ex.: fechado em feriados"></div>
+              <label class="d-flex gap-2 align-items-center mb-4"><input type="checkbox" id="atendimento-exibirHorarios"> Mostrar os horários no rodapé do site</label>
+              <div class="mb-5"><label class="form-label" for="operacao-fusoHorario">Fuso horário da loja</label>
+                <select class="form-control" id="operacao-fusoHorario" style="max-width: 24rem"></select>
+                <div class="suave fs-sm mt-1">Define o que é "hoje" nas datas dos pedidos e nos dias do resumo.</div></div>
+
+              <h2 class="fs-lg mb-2">Como o cliente recebe o pedido</h2>
+              <p class="suave fs-sm mb-4">O carrinho só oferece as opções ligadas aqui. Os textos aparecem para o cliente na hora de enviar o pedido.</p>
+              <label class="d-flex gap-2 align-items-center mb-2 fw-semibold"><input type="checkbox" id="retirada-ativa"> Retirada na loja</label>
+              <div class="mb-5"><label class="form-label" for="retirada-instrucoes">Informações da retirada (opcional)</label><textarea class="form-control" id="retirada-instrucoes" rows="2" maxlength="300" placeholder="Ex.: Rua das Flores, 10. Retirada das 9h às 18h."></textarea></div>
+              <label class="d-flex gap-2 align-items-center mb-2 fw-semibold"><input type="checkbox" id="entrega-ativa"> Entrega</label>
+              <div class="mb-4"><label class="form-label" for="entrega-taxa">Taxa de entrega (aparece ao lado da opção)</label><input class="form-control" id="entrega-taxa" maxlength="80" placeholder="Ex.: taxa a combinar, R$ 8,00, grátis no centro"></div>
+              <div class="mb-5"><label class="form-label" for="entrega-instrucoes">Informações da entrega (opcional)</label><textarea class="form-control" id="entrega-instrucoes" rows="2" maxlength="300" placeholder="Ex.: entregamos no centro e bairros vizinhos, de terça a sábado."></textarea></div>
+              <button class="btn btn-solid theme-primary">Salvar</button>
+            </form>
+            <form class="painel mt-5" id="form-catalogo">
+              <h2 class="fs-lg mb-2">Como você chama o que vende?</h2>
+              <p class="suave fs-sm mb-4">Esses nomes aparecem no menu, nos botões e nos títulos do site. Exemplos: Doce / Doces, Prato / Pratos, Peça / Peças.</p>
+              <div class="row g-4 mb-4">
+                <div class="col-6"><label class="form-label" for="catalogo-nomeSingular">Um item</label><input class="form-control" id="catalogo-nomeSingular" maxlength="30" required placeholder="Produto"></div>
+                <div class="col-6"><label class="form-label" for="catalogo-nomePlural">Vários itens</label><input class="form-control" id="catalogo-nomePlural" maxlength="30" required placeholder="Produtos"></div>
+              </div>
+              <div class="mb-5"><label class="form-label" for="catalogo-emojiPadrao">Ícone para itens sem foto</label><input class="form-control" id="catalogo-emojiPadrao" maxlength="8" style="max-width: 6rem"></div>
+              <button class="btn btn-solid theme-primary">Salvar</button>
+            </form>
+            <form class="painel mt-5" id="form-modulos">
+              <h2 class="fs-lg mb-2">Recursos opcionais</h2>
+              <p class="suave fs-sm mb-4">Ligue só o que a sua loja usa. Um recurso desligado some das telas e deixa de valer nos pedidos novos; o que você já cadastrou fica guardado e volta se religar. Depois de ligar, os campos aparecem na tela de edição de cada item.</p>
+              <label class="d-flex gap-2 align-items-baseline mb-3"><input type="checkbox" id="modulos-variacoes">
+                <span><strong>Variações</strong><br><span class="suave fs-sm">O mesmo item em opções com preço próprio (ex.: Pequeno, Médio, Grande). O cliente escolhe uma.</span></span></label>
+              <label class="d-flex gap-2 align-items-baseline mb-3"><input type="checkbox" id="modulos-adicionais">
+                <span><strong>Adicionais</strong><br><span class="suave fs-sm">Extras que o cliente pode marcar, somados ao preço (ex.: calda, embalagem para presente).</span></span></label>
+              <label class="d-flex gap-2 align-items-baseline mb-5"><input type="checkbox" id="modulos-estoque">
+                <span><strong>Estoque</strong><br><span class="suave fs-sm">Você informa quanto tem de cada item. Cada pedido diminui o estoque, o item esgotado não pode ser pedido, e cancelar um pedido devolve a quantidade.</span></span></label>
               <button class="btn btn-solid theme-primary">Salvar</button>
             </form>
           </div>
