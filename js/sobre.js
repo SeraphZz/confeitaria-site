@@ -1,7 +1,8 @@
 'use strict';
 // Página "Sobre": história e trajetória. A loja logada pode editar aqui mesmo.
 
-App.pronto.then(({ loja, sobre: sobreInicial, admin }) => {
+App.pronto.then(({ loja, sobre: sobreInicial, pode }) => {
+  const admin = pode('conteudo.editar'); // quem pode editar o conteúdo vê o botão Editar
   const { esc, api, aviso } = App;
   const conteudo = document.getElementById('conteudo');
   let sobre = sobreInicial;

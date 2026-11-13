@@ -8,7 +8,7 @@ const { CABECALHOS_SEGURANCA } = require('./http');
 const { UPLOADS_DIR } = require('./imagens');
 const { gerarCss, imagemSegura } = require('./tema');
 const { temaPara } = require('./aparencia');
-const { ehAdmin } = require('./sessao');
+const { pode } = require('./sessao');
 
 const PAGINAS = [
   [/^\/$/, 'index.html'],
@@ -63,11 +63,11 @@ function servirEstatico(req, caminho, res, consulta = '') {
   // A resposta depende do cookie de sessão, então nenhum cache no caminho pode guardá-la para outra pessoa.
   if (caminho === '/tema.css') {
     res.writeHead(200, { 'Content-Type': MIME['.css'], 'Cache-Control': 'private, no-cache', Vary: 'Cookie', ...CABECALHOS_SEGURANCA });
-    return res.end(gerarCss(temaPara(ehAdmin(req))));
+    return res.end(gerarCss(temaPara(pode(req, 'aparencia.editar'))));
   }
   // Ícone da aba do navegador: a imagem enviada pela loja, se houver.
   if (caminho === '/favicon.ico') {
-    const favicon = imagemSegura(temaPara(ehAdmin(req)).favicon);
+    const favicon = imagemSegura(temaPara(pode(req, 'aparencia.editar')).favicon);
     return favicon ? enviarArquivo(res, path.join(UPLOADS_DIR, path.basename(favicon)), 200, { 'Cache-Control': 'private, no-cache', Vary: 'Cookie' }) : enviarArquivo404(res);
   }
 

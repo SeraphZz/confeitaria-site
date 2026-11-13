@@ -48,7 +48,7 @@ function transacao(fn) {
   }
 }
 
-// ---------------------------------------------------------------- config (loja, sobre, admin)
+// ---------------------------------------------------------------- config (loja, sobre, tema...)
 
 function lerConfig(chave) {
   const linha = sql('SELECT valor FROM config WHERE chave = ?').get(chave);
@@ -289,18 +289,108 @@ function apagarPedidosDemo() {
   sql('DELETE FROM pedidos WHERE demo = 1').run(); // os itens vão junto (ON DELETE CASCADE)
 }
 
+// ---------------------------------------------------------------- equipe: perfis e usuários
+
+function perfisDe(linhas) {
+  return linhas.map((l) => ({
+    id: l.id, nome: l.nome, sistema: Boolean(l.sistema),
+    permissoes: sql('SELECT permissao FROM perfil_permissoes WHERE perfil_id = ? ORDER BY permissao').all(l.id).map((p) => p.permissao),
+  }));
+}
+const listarPerfis = () => perfisDe(sql('SELECT * FROM perfis ORDER BY sistema DESC, nome').all());
+const perfilPorId = (id) => perfisDe(sql('SELECT * FROM perfis WHERE id = ?').all(String(id)))[0] || null;
+const perfilDeSistema = () => perfisDe(sql('SELECT * FROM perfis WHERE sistema = 1 ORDER BY rowid LIMIT 1').all())[0] || null;
+const usuariosNoPerfil = (id) => sql('SELECT COUNT(*) AS n FROM usuarios WHERE perfil_id = ?').get(id).n;
+
+// Cria ou atualiza (pelo id) o nome e a lista de permissões. Nunca muda o campo `sistema`.
+function salvarPerfil(p) {
+  transacao(() => {
+    sql('INSERT INTO perfis (id, nome, sistema) VALUES (?, ?, 0) ON CONFLICT (id) DO UPDATE SET nome = excluded.nome').run(p.id, p.nome);
+    sql('DELETE FROM perfil_permissoes WHERE perfil_id = ?').run(p.id);
+    for (const permissao of p.permissoes) sql('INSERT INTO perfil_permissoes (perfil_id, permissao) VALUES (?, ?)').run(p.id, permissao);
+  });
+}
+
+function apagarPerfil(id) {
+  sql('DELETE FROM perfis WHERE id = ? AND sistema = 0').run(id);
+}
+
+function usuariosDe(linhas) {
+  return linhas.map((l) => {
+    const ajustes = sql('SELECT permissao, efeito FROM usuario_permissoes WHERE usuario_id = ? ORDER BY permissao').all(l.id);
+    return {
+      id: l.id, usuario: l.usuario, nome: l.nome, perfilId: l.perfil_id, salt: l.salt, hash: l.hash,
+      ativo: Boolean(l.ativo), senhaInicial: Boolean(l.senha_inicial), criadoEm: l.criado_em,
+      // Ajustes individuais sobre o perfil (ver src/permissoes.js).
+      ajustes: {
+        conceder: ajustes.filter((a) => a.efeito === 'conceder').map((a) => a.permissao),
+        negar: ajustes.filter((a) => a.efeito === 'negar').map((a) => a.permissao),
+      },
+    };
+  });
+}
+const listarUsuarios = () => usuariosDe(sql('SELECT * FROM usuarios ORDER BY ativo DESC, nome, rowid').all());
+const usuarioPorId = (id) => usuariosDe(sql('SELECT * FROM usuarios WHERE id = ?').all(String(id)))[0] || null;
+const usuarioPorLogin = (login) => usuariosDe(sql('SELECT * FROM usuarios WHERE usuario = ?').all(String(login)))[0] || null;
+const contarUsuarios = () => sql('SELECT COUNT(*) AS n FROM usuarios').get().n;
+// Quantas pessoas ativas têm o perfil Administrador: a loja nunca pode ficar sem nenhuma.
+const contarAdministradoresAtivos = () =>
+  sql('SELECT COUNT(*) AS n FROM usuarios u JOIN perfis p ON p.id = u.perfil_id WHERE u.ativo = 1 AND p.sistema = 1').get().n;
+
+// Cria ou atualiza (pelo id), com os ajustes individuais.
+function salvarUsuario(u) {
+  transacao(() => {
+    sql(`INSERT INTO usuarios (id, usuario, nome, perfil_id, salt, hash, ativo, senha_inicial, criado_em)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET usuario = excluded.usuario, nome = excluded.nome, perfil_id = excluded.perfil_id,
+           salt = excluded.salt, hash = excluded.hash, ativo = excluded.ativo, senha_inicial = excluded.senha_inicial`)
+      .run(u.id, u.usuario, u.nome, u.perfilId, u.salt, u.hash, u.ativo ? 1 : 0, u.senhaInicial ? 1 : 0, u.criadoEm);
+    sql('DELETE FROM usuario_permissoes WHERE usuario_id = ?').run(u.id);
+    const ajustes = u.ajustes || { conceder: [], negar: [] };
+    for (const efeito of ['conceder', 'negar']) {
+      for (const permissao of ajustes[efeito]) sql('INSERT INTO usuario_permissoes (usuario_id, permissao, efeito) VALUES (?, ?, ?)').run(u.id, permissao, efeito);
+    }
+  });
+}
+
+// ---------------------------------------------------------------- sessões de login
+// `tokenHash` é o SHA-256 do token que está no cookie (ver src/sessao.js): o token em si nunca é gravado.
+
+function criarSessao({ tokenHash, usuarioId = null, clienteId = null, validade }) {
+  sql('INSERT INTO sessoes (token_hash, tipo, usuario_id, cliente_id, criada_em, validade) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(tokenHash, usuarioId ? 'usuario' : 'cliente', usuarioId, clienteId, new Date().toISOString(), validade);
+}
+
+function sessaoPorHash(tokenHash) {
+  const l = sql('SELECT * FROM sessoes WHERE token_hash = ?').get(String(tokenHash));
+  return l ? { tipo: l.tipo, usuarioId: l.usuario_id, clienteId: l.cliente_id, validade: l.validade } : null;
+}
+
+const apagarSessao = (tokenHash) => sql('DELETE FROM sessoes WHERE token_hash = ?').run(String(tokenHash));
+const apagarSessoesVencidas = (agora = Date.now()) => sql('DELETE FROM sessoes WHERE validade < ?').run(agora);
+// Derruba todas as sessões de uma pessoa, menos (se informada) a de `mantendo`.
+const apagarSessoesDoCliente = (clienteId) => sql('DELETE FROM sessoes WHERE cliente_id = ?').run(clienteId);
+const apagarSessoesDoUsuario = (usuarioId, mantendo = '') => sql('DELETE FROM sessoes WHERE usuario_id = ? AND token_hash <> ?').run(usuarioId, mantendo);
+
 // ---------------------------------------------------------------- migração do db.json antigo
 // Acontece sozinha, uma única vez: se existe data/db.json e o banco novo está vazio, copia tudo
 // e renomeia o arquivo antigo para db.json.migrado (fica guardado como cópia de segurança).
 
 function importarJsonAntigo() {
-  if (lerConfig('admin') || !fs.existsSync(JSON_ANTIGO)) return;
+  if (contarUsuarios() || !fs.existsSync(JSON_ANTIGO)) return;
   const antigo = JSON.parse(fs.readFileSync(JSON_ANTIGO, 'utf8'));
   const clientes = antigo.clientes || [];
   const pedidos = antigo.pedidos || [];
 
   transacao(() => {
-    for (const chave of ['loja', 'sobre', 'admin']) gravarConfig(chave, antigo[chave]);
+    for (const chave of ['loja', 'sobre']) gravarConfig(chave, antigo[chave]);
+    // A conta de acesso do arquivo antigo vira o primeiro usuário, com o perfil Administrador.
+    const admin = antigo.admin || {};
+    salvarUsuario({
+      id: require('node:crypto').randomUUID(), usuario: String(admin.usuario || 'confeiteira'), nome: 'Administrador',
+      perfilId: perfilDeSistema().id, salt: String(admin.salt || ''), hash: String(admin.hash || ''),
+      ativo: true, senhaInicial: Boolean(admin.senhaInicial), criadoEm: new Date().toISOString(),
+    });
     for (const d of antigo.doces || []) salvarProduto(d); // no arquivo antigo a lista se chama "doces"
     for (const c of clientes) {
       // Nos primeiros bancos o endereço era um texto só: ele vai para o campo "rua".
@@ -332,4 +422,7 @@ module.exports = {
   baixarEstoque, devolverEstoque, trocarSituacaoEstoque,
   listarClientes, clientePorId, clientePorEmail, salvarCliente,
   inserirPedido, listarPedidos, paginarPedidos, pedidoPorId, mudarStatusPedido, contarPedidosComStatus, apagarPedidosDemo,
+  listarPerfis, perfilPorId, perfilDeSistema, usuariosNoPerfil, salvarPerfil, apagarPerfil,
+  listarUsuarios, usuarioPorId, usuarioPorLogin, contarUsuarios, contarAdministradoresAtivos, salvarUsuario,
+  criarSessao, sessaoPorHash, apagarSessao, apagarSessoesVencidas, apagarSessoesDoCliente, apagarSessoesDoUsuario,
 };

@@ -1,7 +1,7 @@
 'use strict';
 // Página inicial: capa + grade de produtos.
 
-App.pronto.then(async ({ loja, admin, catalogo }) => {
+App.pronto.then(async ({ loja, pode, catalogo }) => {
   const { esc, fotoHtml, minusculas } = App;
   document.title = loja.nome;
   document.getElementById('capa-titulo').textContent = loja.nome;
@@ -11,7 +11,7 @@ App.pronto.then(async ({ loja, admin, catalogo }) => {
   document.getElementById('titulo-produtos').textContent = catalogo.nomePlural;
   const novo = document.getElementById('novo-produto');
   novo.textContent = `+ Adicionar ${minusculas(catalogo.nomeSingular)}`;
-  novo.hidden = !admin;
+  novo.hidden = !pode('produtos.editar');
 
   const grade = document.getElementById('grade');
   const [produtos, categorias] = await Promise.all([App.api('/api/produtos'), App.api('/api/categorias')]);

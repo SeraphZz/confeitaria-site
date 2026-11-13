@@ -5,7 +5,7 @@ const crypto = require('node:crypto');
 const banco = require('../../banco');
 const { ErroHttp, lerJson } = require('../http');
 const { texto, inteiro } = require('../validacao');
-const { ehAdmin } = require('../sessao');
+const { daEquipe } = require('../sessao');
 const { salvarImagem, removerImagem, LIMITE_JSON_COM_FOTO } = require('../imagens');
 const { criarSlug } = require('../primeiro-uso');
 const configuracoes = require('../configuracoes');
@@ -62,7 +62,7 @@ module.exports = [
     const categoria = { id: crypto.randomUUID(), nome: lerNomeCategoria(corpo.nome) };
     banco.salvarCategoria(categoria);
     return categoria;
-  }, true],
+  }, 'produtos.editar'],
 
   // Recebe os ids de todas as categorias, na nova ordem.
   ['PUT', /^\/api\/categorias\/ordem$/, async (req) => {
@@ -72,7 +72,7 @@ module.exports = [
     if (!mesmaLista) throw new ErroHttp(409, 'A lista de categorias mudou. Recarregue a página.');
     banco.ordenarCategorias(ids);
     return banco.listarCategorias();
-  }, true],
+  }, 'produtos.editar'],
 
   ['PUT', /^\/api\/categorias\/([0-9a-f-]{36})$/, async (req, [id]) => {
     const corpo = await lerJson(req);
@@ -80,23 +80,23 @@ module.exports = [
     categoria.nome = lerNomeCategoria(corpo.nome, id);
     banco.salvarCategoria(categoria);
     return categoria;
-  }, true],
+  }, 'produtos.editar'],
 
   ['DELETE', /^\/api\/categorias\/([0-9a-f-]{36})$/, (req, [id]) => {
     banco.apagarCategoria(acharCategoria(id).id);
     return { ok: true };
-  }, true],
+  }, 'produtos.editar'],
 
   // ---- produtos
   // Tudo o que sai daqui passa por `paraVitrine`: variações, adicionais e estoque só aparecem com o recurso ligado.
   ['GET', /^\/api\/produtos$/, (req) => {
     const ligados = modulos();
-    return banco.listarProdutos({ soDisponiveis: !ehAdmin(req) }).map((produto) => paraVitrine(produto, ligados));
+    return banco.listarProdutos({ soDisponiveis: !daEquipe(req) }).map((produto) => paraVitrine(produto, ligados));
   }],
 
   ['GET', /^\/api\/produtos\/([a-z0-9-]+)$/, (req, [slug]) => {
     const produto = banco.produtoPorSlug(slug);
-    if (!produto || (!produto.disponivel && !ehAdmin(req))) throw new ErroHttp(404, 'Produto não encontrado.');
+    if (!produto || (!produto.disponivel && !daEquipe(req))) throw new ErroHttp(404, 'Produto não encontrado.');
     return paraVitrine(produto);
   }],
 
@@ -108,7 +108,7 @@ module.exports = [
     produto.slug = criarSlug(produto.nome, banco.listarProdutos().map((p) => p.slug));
     banco.salvarProduto(produto);
     return paraVitrine(produto);
-  }, true],
+  }, 'produtos.editar'],
 
   ['PUT', /^\/api\/produtos\/([0-9a-f-]{36})$/, async (req, [id]) => {
     // O corpo é lido antes de buscar o produto: entre buscar e gravar não há espera, então nada muda no meio.
@@ -117,14 +117,14 @@ module.exports = [
     aplicarCampos(produto, corpo);
     banco.salvarProduto(produto);
     return paraVitrine(produto);
-  }, true],
+  }, 'produtos.editar'],
 
   ['DELETE', /^\/api\/produtos\/([0-9a-f-]{36})$/, (req, [id]) => {
     const produto = acharProduto(id);
     removerImagem(produto);
     banco.apagarProduto(produto.id);
     return { ok: true };
-  }, true],
+  }, 'produtos.editar'],
 
   ['PUT', /^\/api\/produtos\/([0-9a-f-]{36})\/imagem$/, async (req, [id]) => {
     const { imagem } = await lerJson(req, LIMITE_JSON_COM_FOTO);
@@ -132,5 +132,5 @@ module.exports = [
     if (imagem) salvarImagem(produto, imagem); else removerImagem(produto);
     banco.salvarProduto(produto);
     return paraVitrine(produto);
-  }, true],
+  }, 'produtos.editar'],
 ];

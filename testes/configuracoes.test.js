@@ -39,8 +39,9 @@ test('datas: o dia depende do fuso da loja, não do servidor', () => {
 
 test('visitante recebe só as seções públicas', async () => {
   const r = await visitante.get('/api/site');
-  assert.deepEqual(Object.keys(r.dados).sort(), ['admin', 'atendimento', 'catalogo', 'cliente', 'loja', 'modulos', 'previaTema', 'sobre', 'tema']);
-  assert.doesNotMatch(r.texto, /hash|salt|usuario|fusoHorario/);
+  assert.deepEqual(Object.keys(r.dados).sort(), ['admin', 'atendimento', 'catalogo', 'cliente', 'loja', 'modulos', 'previaTema', 'sobre', 'tema', 'usuario']);
+  assert.equal(r.dados.usuario, null);
+  assert.doesNotMatch(r.texto, /hash|salt|confeiteira|fusoHorario/);
 });
 
 test('painel lê as seções editáveis, e nunca a conta de acesso', async () => {

@@ -120,9 +120,6 @@ const SECOES = {
 
   // Alterações de aparência ainda não publicadas (mesmo formato de `tema`). Só quem está no painel vê.
   temaRascunho: { publica: false, editavel: false, padrao: null },
-
-  // Conta de acesso ao painel: { usuario, salt, hash, senhaInicial }. Interna: nunca é devolvida ao navegador.
-  admin: { publica: false, editavel: false, padrao: null },
 };
 
 function secao(nome) {

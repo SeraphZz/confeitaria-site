@@ -8,18 +8,20 @@
 const http = require('node:http');
 const { PORTA, HOST } = require('./src/ambiente');
 const { ErroHttp, enviarJson, conferirOrigem } = require('./src/http');
-const { ehAdmin } = require('./src/sessao');
+const { exigirPermissao } = require('./src/sessao');
 const { servirEstatico } = require('./src/estaticos');
 const { garantirDadosIniciais } = require('./src/primeiro-uso');
 
 garantirDadosIniciais();
 
-// Cada rota é [método, caminho, handler, exigeAdmin].
+// Cada rota é [método, caminho, handler, permissão]. A permissão é um id de src/permissoes.js, ou "true" quando basta
+// ser da equipe da loja; rota sem esse item é pública (ou confere o cliente por conta própria).
 const rotas = [
   ...require('./src/rotas/contas'),
   ...require('./src/rotas/catalogo'),
   ...require('./src/rotas/pedidos'),
   ...require('./src/rotas/loja'),
+  ...require('./src/rotas/equipe'),
 ];
 
 async function atender(req, res) {
@@ -35,10 +37,10 @@ async function atender(req, res) {
   // Tudo o que altera dados só é aceito se o pedido saiu de uma página do próprio site (ver src/http.js).
   if (req.method !== 'GET' && req.method !== 'HEAD') conferirOrigem(req);
 
-  for (const [metodo, re, handler, exigeAdmin] of rotas) {
+  for (const [metodo, re, handler, permissao] of rotas) {
     const m = metodo === req.method && re.exec(caminho);
     if (!m) continue;
-    if (exigeAdmin && !ehAdmin(req)) throw new ErroHttp(401, 'Faça login para continuar.');
+    if (permissao) exigirPermissao(req, permissao); // 401 sem login; 403 sem a permissão
     return enviarJson(res, 200, await handler(req, m.slice(1), res, url));
   }
   throw new ErroHttp(404, 'Rota não encontrada.');

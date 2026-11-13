@@ -3,9 +3,8 @@
 
 const banco = require('../../banco');
 const { ErroHttp, lerJson, ipDe, limitar, lerPagina, pagina } = require('../http');
-const { exigirCliente } = require('../sessao');
+const { exigirCliente, usuarioLogado } = require('../sessao');
 const { STATUS, STATUS_ABERTOS, criarPedido, mudarStatus, montarClientes, montarDashboard } = require('../pedidos');
-const configuracoes = require('../configuracoes');
 
 const POR_PAGINA = 30; // pedidos e clientes por página no painel
 
@@ -25,7 +24,7 @@ module.exports = [
     const numero = lerPagina(url);
     const { pedidos, total } = banco.paginarPedidos({ status, pagina: numero, porPagina: POR_PAGINA });
     return pagina(pedidos, total, numero, POR_PAGINA);
-  }, true],
+  }, 'pedidos.ver'],
 
   // Pessoas e o que cada uma já pediu, de quem mais comprou para quem menos comprou: ?pagina=2&busca=ana.
   // A busca olha nome, telefone e e-mail.
@@ -35,7 +34,7 @@ module.exports = [
     const achados = busca ? todos.filter((c) => `${c.nome} ${c.telefone} ${c.email}`.toLowerCase().includes(busca)) : todos;
     const numero = lerPagina(url);
     return pagina(achados.slice((numero - 1) * POR_PAGINA, numero * POR_PAGINA), achados.length, numero, POR_PAGINA);
-  }, true],
+  }, 'clientes.ver'],
 
   ['PATCH', /^\/api\/pedidos\/([0-9a-f-]{36})$/, async (req, [id]) => {
     const { status } = await lerJson(req);
@@ -43,10 +42,10 @@ module.exports = [
     const pedido = banco.pedidoPorId(id);
     if (!pedido) throw new ErroHttp(404, 'Pedido não encontrado.');
     return mudarStatus(pedido, status); // cancelar e reabrir acertam o estoque
-  }, true],
+  }, 'pedidos.alterar'],
 
   ['GET', /^\/api\/dashboard$/, (req, _p, _res, url) => {
     const dias = Number(url.searchParams.get('dias'));
-    return { ...montarDashboard([7, 30, 90].includes(dias) ? dias : 30), senhaInicial: configuracoes.ler('admin').senhaInicial };
-  }, true],
+    return { ...montarDashboard([7, 30, 90].includes(dias) ? dias : 30), senhaInicial: usuarioLogado(req).senhaInicial };
+  }, 'resumo.ver'],
 ];

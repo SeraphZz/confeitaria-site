@@ -156,7 +156,7 @@ const App = (() => {
     return png ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.85);
   }
 
-  function montarCabecalho({ loja, admin, cliente, catalogo, tema, previaTema }) {
+  function montarCabecalho({ loja, admin, usuario, cliente, catalogo, tema, previaTema }) {
     // Com logotipo enviado, ele aparece ao lado do nome; sem, fica o ícone padrão do catálogo.
     const simbolo = tema.logo
       ? `<img class="marca-logo" src="${esc(tema.logo)}" alt="">`
@@ -168,7 +168,7 @@ const App = (() => {
       <div class="faixa-admin"><div class="container d-flex justify-content-between gap-4">
         <span>${previaTema
           ? 'Prévia da nova aparência: só você está vendo. <a href="/admin#aparencia">Publicar ou descartar</a>'
-          : 'Você está no painel da loja.'}</span>
+          : `Você entrou como ${esc(usuario.nome)}.`}</span>
         <span><a href="/admin">Painel</a> · <button type="button" id="sair">Sair</button></span>
       </div></div>` : '';
     document.getElementById('cabecalho').innerHTML = `${faixa}
@@ -232,6 +232,9 @@ const App = (() => {
 
   // Cada página espera por isto antes de desenhar: traz dados da loja e quem está logado.
   const pronto = api('/api/site').then((site) => {
+    // site.pode('produtos.editar'): se quem está logado é da equipe e tem a permissão. Serve para as telas mostrarem
+    // só o que a pessoa consegue usar; quem decide de verdade é o servidor, em cada rota.
+    site.pode = (permissao) => Boolean(site.usuario?.permissoes.includes(permissao));
     montarCabecalho(site);
     montarRodape(site);
     return site;

@@ -23,6 +23,7 @@
         <button type="button" role="tab" data-aba="clientes">Clientes</button>
         <button type="button" role="tab" data-aba="produtos">Produtos</button>
         <button type="button" role="tab" data-aba="aparencia">Aparência</button>
+        <button type="button" role="tab" data-aba="equipe">Equipe</button>
         <button type="button" role="tab" data-aba="config">Configurações</button>
       </div>
 
@@ -163,6 +164,27 @@
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section id="aba-equipe" hidden>
+        <p class="suave mb-5">Cada pessoa da equipe entra com o próprio usuário e senha e vê só o que o perfil dela permite. Você só consegue dar a alguém as permissões que você mesmo tem.</p>
+        <div class="painel mb-5">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+            <h2 class="fs-lg mb-0">Pessoas</h2>
+            <button type="button" class="btn btn-solid theme-primary btn-sm" id="nova-pessoa">+ Adicionar pessoa</button>
+          </div>
+          <div id="lista-pessoas"></div>
+          <form class="painel-edicao mt-4" id="form-pessoa" hidden></form>
+        </div>
+        <div class="painel">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-2">
+            <h2 class="fs-lg mb-0">Perfis</h2>
+            <button type="button" class="btn btn-outline theme-primary btn-sm" id="novo-perfil">+ Criar perfil</button>
+          </div>
+          <p class="suave fs-sm mb-4">Um perfil é um conjunto de permissões (ex.: Atendimento, Catálogo). O Administrador é fixo e pode tudo.</p>
+          <div id="lista-perfis"></div>
+          <form class="painel-edicao mt-4" id="form-perfil" hidden></form>
         </div>
       </section>
 

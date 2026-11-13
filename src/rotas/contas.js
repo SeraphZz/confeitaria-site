@@ -5,11 +5,14 @@ const crypto = require('node:crypto');
 const banco = require('../../banco');
 const { ErroHttp, lerJson, ipDe, limitar, conferirBloqueio, registrarErro, zerarErros, lerPagina, pagina } = require('../http');
 const { texto, lerEmail, lerTelefone, lerEndereco } = require('../validacao');
-const { senhaConfere, novaSenha } = require('../senhas');
-const { clienteLogado, exigirCliente, abrirSessao, encerrarSessao, derrubarSessoesDoCliente, ehAdmin } = require('../sessao');
+const { senhaConfere, novaSenha, gerarHash, sortearSenha } = require('../senhas');
+const { clienteLogado, exigirCliente, abrirSessao, encerrarSessao, derrubarSessoesDoCliente, usuarioLogado, pode } = require('../sessao');
 const { enviarLinkRedefinicao, conferirToken } = require('../redefinicao');
 const configuracoes = require('../configuracoes');
 const { temaPara, temRascunho } = require('../aparencia');
+
+// Hash de uma senha que ninguém conhece, para o login gastar o mesmo tempo quando a conta não existe.
+const CONTA_FALSA = gerarHash(sortearSenha());
 
 const PEDIDOS_POR_PAGINA = 20; // histórico em "Minha conta"
 
@@ -20,18 +23,23 @@ function clientePublico(c) {
 
 module.exports = [
   ['GET', /^\/api\/site$/, (req) => {
-    const admin = ehAdmin(req);
+    const usuario = usuarioLogado(req);
+    const vePrevia = pode(req, 'aparencia.editar');
     return {
       // Só as seções marcadas como públicas em src/configuracoes.js saem daqui.
-      ...configuracoes.publicas(), admin, cliente: clientePublico(clienteLogado(req)),
-      // Quem está no painel navega vendo o rascunho da aparência, se houver; `previaTema` avisa a tela disso.
-      tema: temaPara(admin), previaTema: admin && temRascunho(),
+      ...configuracoes.publicas(), cliente: clientePublico(clienteLogado(req)),
+      // `admin`: quem está logado é da equipe da loja. `usuario` diz quem é e o que pode fazer, para as telas
+      // mostrarem só o que a pessoa consegue usar (quem decide de verdade é cada rota, no servidor).
+      admin: Boolean(usuario),
+      usuario: usuario && { nome: usuario.nome, usuario: usuario.usuario, permissoes: [...usuario.permissoes], senhaInicial: usuario.senhaInicial },
+      // Quem cuida da aparência navega vendo o rascunho, se houver; `previaTema` avisa a tela disso.
+      tema: temaPara(vePrevia), previaTema: vePrevia && temRascunho(),
     };
   }],
 
   ['POST', /^\/api\/login$/, async (req, _p, res) => {
     limitar(`login:${ipDe(req)}`, 8, 15 * 60 * 1000);
-    // Login único: a loja entra com o usuário dela; clientes, com o e-mail.
+    // Login único: a equipe da loja entra com o usuário de cada um; clientes, com o e-mail.
     const { usuario, senha } = await lerJson(req);
     const login = typeof usuario === 'string' ? usuario.trim().toLowerCase() : '';
     // Além do limite por IP, cada conta aceita poucos erros de senha seguidos, venham de onde vierem. A contagem é
@@ -40,19 +48,19 @@ module.exports = [
     conferirBloqueio(conta);
     const recusar = () => { registrarErro(conta); return new ErroHttp(401, 'E-mail/usuário ou senha incorretos.'); };
 
-    const admin = configuracoes.ler('admin');
-    if (login === admin.usuario) {
-      if (!senhaConfere(senha, admin)) throw recusar();
-      zerarErros(conta);
-      abrirSessao(res, { tipo: 'admin' });
-      return { tipo: 'admin' };
-    }
-    const cliente = banco.clientePorEmail(login);
-    // Sem conta, confere contra um hash qualquer: a resposta demora o mesmo tanto e não revela se o e-mail existe.
-    const senhaOk = senhaConfere(senha, cliente || admin);
-    if (!cliente || !senhaOk) throw recusar();
+    // Usuário da equipe nunca tem "@" e e-mail de cliente sempre tem: os dois nunca se confundem.
+    const usuarioEquipe = banco.usuarioPorLogin(login);
+    const cliente = usuarioEquipe ? null : banco.clientePorEmail(login);
+    // Sem conta, confere contra um hash qualquer: a resposta demora o mesmo tanto e não revela se a conta existe.
+    const senhaOk = senhaConfere(senha, usuarioEquipe || cliente || CONTA_FALSA);
+    // Conta desativada responde igual a senha errada.
+    if (!senhaOk || !(cliente || usuarioEquipe?.ativo)) throw recusar();
     zerarErros(conta);
-    abrirSessao(res, { tipo: 'cliente', clienteId: cliente.id });
+    if (usuarioEquipe) {
+      abrirSessao(res, { usuarioId: usuarioEquipe.id });
+      return { tipo: 'admin' }; // a tela de login usa para decidir entre abrir o painel ou a loja
+    }
+    abrirSessao(res, { clienteId: cliente.id });
     return { tipo: 'cliente' };
   }],
 
@@ -69,7 +77,7 @@ module.exports = [
       ...novaSenha(corpo.senha), criadoEm: new Date().toISOString(),
     };
     banco.salvarCliente(cliente);
-    abrirSessao(res, { tipo: 'cliente', clienteId: cliente.id });
+    abrirSessao(res, { clienteId: cliente.id });
     return clientePublico(cliente);
   }],
 

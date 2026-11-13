@@ -172,6 +172,35 @@ test('migração 004: produtos e pedidos antigos ficam sem estoque, variação e
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pedido_itens').get().n, 1);
 });
 
+test('migração 005: a conta de acesso vira o primeiro Administrador, com o mesmo usuário e a mesma senha', () => {
+  const migracoes = carregarMigracoes();
+  aplicar(db, { migracoes: migracoes.slice(0, 4), log: silencio });
+  db.prepare("INSERT INTO config (chave, valor) VALUES ('admin', ?)").run(JSON.stringify({ usuario: 'dona', salt: 'sal-antigo', hash: 'hash-antigo', senhaInicial: false }));
+  db.prepare("INSERT INTO config (chave, valor) VALUES ('loja', ?)").run(JSON.stringify({ nome: 'Loja Antiga' }));
+
+  aplicar(db, { migracoes: migracoes.slice(0, 5), log: silencio });
+  const usuarios = db.prepare('SELECT u.usuario, u.salt, u.hash, u.ativo, u.senha_inicial, p.nome AS perfil, p.sistema FROM usuarios u JOIN perfis p ON p.id = u.perfil_id').all().map((l) => ({ ...l }));
+  assert.deepEqual(usuarios, [{ usuario: 'dona', salt: 'sal-antigo', hash: 'hash-antigo', ativo: 1, senha_inicial: 0, perfil: 'Administrador', sistema: 1 }]);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM config WHERE chave = 'admin'").get().n, 0, 'a senha não fica em dois lugares');
+  assert.equal(JSON.parse(db.prepare("SELECT valor FROM config WHERE chave = 'loja'").get().valor).nome, 'Loja Antiga');
+  assert.deepEqual(db.prepare('SELECT nome FROM perfis ORDER BY sistema DESC, nome').all().map((l) => l.nome), ['Administrador', 'Atendimento', 'Catálogo']);
+
+  // O banco recusa o que não faz sentido: perfil em uso não é apagado; sessão tem um dono só.
+  assert.throws(() => db.exec('DELETE FROM perfis WHERE sistema = 1'), /FOREIGN KEY/);
+  assert.throws(() => db.exec("INSERT INTO sessoes (token_hash, tipo, criada_em, validade) VALUES ('h', 'usuario', 'agora', 1)"), /CHECK/);
+  assert.throws(() => db.exec("INSERT INTO usuario_permissoes (usuario_id, permissao, efeito) SELECT id, 'x', 'talvez' FROM usuarios"), /CHECK/);
+  // Apagar a pessoa leva as sessões e os ajustes dela.
+  db.exec("INSERT INTO sessoes (token_hash, tipo, usuario_id, criada_em, validade) SELECT 'h', 'usuario', id, 'agora', 1 FROM usuarios");
+  db.exec('DELETE FROM usuarios');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM sessoes').get().n, 0);
+});
+
+test('migração 005: banco novo recebe os perfis de partida e nenhuma pessoa', () => {
+  aplicar(db, { log: silencio });
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM perfis').get().n, 3);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM usuarios').get().n, 0);
+});
+
 test('arquivos de migração fora de sequência são recusados', () => {
   const dir = path.join(pasta, 'm');
   fs.mkdirSync(dir);

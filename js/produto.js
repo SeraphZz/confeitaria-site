@@ -2,7 +2,8 @@
 // Página de um produto: o cliente escolhe quantidade/alterações; a loja logada edita tudo no próprio lugar.
 // Variações, adicionais e estoque são recursos opcionais: só aparecem aqui se a loja ligou (Painel > Configurações).
 
-App.pronto.then(async ({ loja, admin, catalogo, modulos }) => {
+App.pronto.then(async ({ loja, pode, catalogo, modulos }) => {
+  const admin = pode('produtos.editar'); // quem pode editar o catálogo vê o botão Editar
   const { esc, brl, api, aviso, fotoHtml, minusculas } = App;
   const conteudo = document.getElementById('conteudo');
   const slug = location.pathname.split('/')[2];

@@ -31,7 +31,11 @@ function criarDadosIniciais() {
     configuracoes.substituir('loja', seed.loja);
     configuracoes.substituir('sobre', seed.sobre);
     configuracoes.substituir('catalogo', seed.catalogo);
-    configuracoes.substituir('admin', { usuario: 'confeiteira', ...gerarHash(senha), senhaInicial: true });
+    // A primeira pessoa da equipe, com o perfil Administrador (criado pela migração 005). As demais ela cria no painel.
+    banco.salvarUsuario({
+      id: crypto.randomUUID(), usuario: 'confeiteira', nome: 'Administrador', perfilId: banco.perfilDeSistema().id,
+      ...gerarHash(senha), ativo: true, senhaInicial: true, criadoEm: new Date().toISOString(),
+    });
   });
   if (!SENHA_INICIAL_ADMIN) {
     console.log('\n==============================================');
@@ -44,7 +48,7 @@ function criarDadosIniciais() {
 }
 
 function garantirDadosIniciais() {
-  if (!configuracoes.ler('admin')) criarDadosIniciais();
+  if (banco.contarUsuarios() === 0) criarDadosIniciais();
 }
 
 module.exports = { criarSlug, garantirDadosIniciais };
