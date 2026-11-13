@@ -56,10 +56,13 @@ App.pronto.then(async ({ loja, admin, catalogo }) => {
       App.carrinho.adicionar(produto.id, limitar(Number(quantidade.value)), document.getElementById('observacoes').value.trim());
       aviso('Adicionado ao carrinho.', { html: '<a href="/carrinho">Ver carrinho</a>' });
     });
-    document.getElementById('editar')?.addEventListener('click', editar);
+    document.getElementById('editar')?.addEventListener('click', abrirEdicao);
   }
 
-  function editar() {
+  const abrirEdicao = () => editar().catch((erro) => aviso(erro.message, { erro: true }));
+
+  async function editar() {
+    const categorias = await api('/api/categorias');
     conteudo.innerHTML = `
       <form class="painel-edicao" id="form-edicao">
         <h1 class="fs-xl mb-5">Editando: ${esc(produto.nome)}</h1>
@@ -81,6 +84,12 @@ App.pronto.then(async ({ loja, admin, catalogo }) => {
             </div>
             <div class="mb-4"><label class="form-label" for="descricao">Descrição</label>
               <textarea class="form-control" id="descricao" rows="6" maxlength="1000">${esc(produto.descricao)}</textarea></div>
+            ${categorias.length ? `
+            <div class="mb-4"><label class="form-label" for="categoria">Categoria</label>
+              <select class="form-control" id="categoria">
+                <option value="">Sem categoria</option>
+                ${categorias.map((c) => `<option value="${c.id}"${c.id === produto.categoriaId ? ' selected' : ''}>${esc(c.nome)}</option>`).join('')}
+              </select></div>` : ''}
             <div class="mb-4"><label class="form-label" for="emoji">Emoji (aparece quando não há foto)</label>
               <input class="form-control" id="emoji" maxlength="8" value="${esc(produto.emoji)}" style="max-width: 6rem"></div>
             <label class="d-flex gap-2 align-items-center mb-5">
@@ -115,6 +124,7 @@ App.pronto.then(async ({ loja, admin, catalogo }) => {
         produto = await api(`/api/produtos/${produto.id}`, { metodo: 'PUT', corpo: {
           nome: campo('nome').value, preco, unidade: campo('unidade').value, descricao: campo('descricao').value,
           emoji: campo('emoji').value, disponivel: campo('disponivel').checked,
+          ...(campo('categoria') ? { categoriaId: campo('categoria').value } : {}),
         } });
         if (novaFoto) produto = await api(`/api/produtos/${produto.id}/imagem`, { metodo: 'PUT', corpo: { imagem: novaFoto } });
         else if (campo('remover-foto')?.checked) produto = await api(`/api/produtos/${produto.id}/imagem`, { metodo: 'PUT', corpo: { imagem: '' } });
@@ -126,6 +136,6 @@ App.pronto.then(async ({ loja, admin, catalogo }) => {
     });
   }
 
-  if (admin && new URLSearchParams(location.search).has('editar')) editar();
+  if (admin && new URLSearchParams(location.search).has('editar')) abrirEdicao();
   else mostrar();
 });

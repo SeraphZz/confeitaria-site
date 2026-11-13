@@ -1,5 +1,5 @@
 'use strict';
-// Rotas do catálogo de produtos: consulta pública e cadastro pela loja (o 4º item `true` marca rota só da loja).
+// Rotas do catálogo (produtos e categorias): consulta pública e cadastro pela loja (o 4º item `true` marca rota só da loja).
 
 const crypto = require('node:crypto');
 const banco = require('../../banco');
@@ -26,9 +26,66 @@ function aplicarCampos(produto, corpo) {
   if ('emoji' in corpo) produto.emoji = texto(corpo.emoji, { max: 8, campo: 'emoji' }) || emojiPadrao();
   if ('preco' in corpo) produto.preco = inteiro(corpo.preco, { min: 0, max: 10_000_00, campo: 'preço' });
   if ('disponivel' in corpo) produto.disponivel = Boolean(corpo.disponivel);
+  if ('categoriaId' in corpo) {
+    // Vazio = sem categoria.
+    const id = corpo.categoriaId || null;
+    if (id !== null && (typeof id !== 'string' || !banco.categoriaPorId(id))) throw new ErroHttp(400, 'Categoria não encontrada. Recarregue a página.');
+    produto.categoriaId = id;
+  }
+}
+
+const MAX_CATEGORIAS = 50;
+
+function acharCategoria(id) {
+  const categoria = banco.categoriaPorId(id);
+  if (!categoria) throw new ErroHttp(404, 'Categoria não encontrada.');
+  return categoria;
+}
+
+// Duas categorias com o mesmo nome confundiriam a loja e o cliente ("Bolos" e "bolos" contam como iguais).
+function lerNomeCategoria(valor, idAtual = null) {
+  const nome = texto(valor, { max: 40, obrigatorio: true, campo: 'nome da categoria' });
+  const igual = (a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }) === 0;
+  if (banco.listarCategorias().some((c) => c.id !== idAtual && igual(c.nome, nome))) throw new ErroHttp(409, 'Já existe uma categoria com esse nome.');
+  return nome;
 }
 
 module.exports = [
+  // ---- categorias (a ordem da lista é a ordem em que aparecem na página inicial)
+  ['GET', /^\/api\/categorias$/, () => banco.listarCategorias()],
+
+  ['POST', /^\/api\/categorias$/, async (req) => {
+    const corpo = await lerJson(req);
+    if (banco.listarCategorias().length >= MAX_CATEGORIAS) throw new ErroHttp(400, `O limite é de ${MAX_CATEGORIAS} categorias.`);
+    const categoria = { id: crypto.randomUUID(), nome: lerNomeCategoria(corpo.nome) };
+    banco.salvarCategoria(categoria);
+    return categoria;
+  }, true],
+
+  // Recebe os ids de todas as categorias, na nova ordem.
+  ['PUT', /^\/api\/categorias\/ordem$/, async (req) => {
+    const { ids } = await lerJson(req);
+    const atuais = banco.listarCategorias().map((c) => c.id);
+    const mesmaLista = Array.isArray(ids) && ids.length === atuais.length && new Set(ids).size === ids.length && ids.every((id) => atuais.includes(id));
+    if (!mesmaLista) throw new ErroHttp(409, 'A lista de categorias mudou. Recarregue a página.');
+    banco.ordenarCategorias(ids);
+    return banco.listarCategorias();
+  }, true],
+
+  ['PUT', /^\/api\/categorias\/([0-9a-f-]{36})$/, async (req, [id]) => {
+    const corpo = await lerJson(req);
+    const categoria = acharCategoria(id);
+    categoria.nome = lerNomeCategoria(corpo.nome, id);
+    banco.salvarCategoria(categoria);
+    return categoria;
+  }, true],
+
+  ['DELETE', /^\/api\/categorias\/([0-9a-f-]{36})$/, (req, [id]) => {
+    banco.apagarCategoria(acharCategoria(id).id);
+    return { ok: true };
+  }, true],
+
+  // ---- produtos
   ['GET', /^\/api\/produtos$/, (req) => banco.listarProdutos({ soDisponiveis: !ehAdmin(req) })],
 
   ['GET', /^\/api\/produtos\/([a-z0-9-]+)$/, (req, [slug]) => {
@@ -39,7 +96,7 @@ module.exports = [
 
   ['POST', /^\/api\/produtos$/, async (req) => {
     const corpo = await lerJson(req);
-    const produto = { id: crypto.randomUUID(), slug: '', nome: '', descricao: '', preco: 0, unidade: 'unidade', emoji: emojiPadrao(), imagem: '', disponivel: true };
+    const produto = { id: crypto.randomUUID(), slug: '', nome: '', descricao: '', preco: 0, unidade: 'unidade', emoji: emojiPadrao(), imagem: '', disponivel: true, categoriaId: null };
     aplicarCampos(produto, { nome: '', ...corpo });
     produto.slug = criarSlug(produto.nome, banco.listarProdutos().map((p) => p.slug));
     banco.salvarProduto(produto);
@@ -47,8 +104,10 @@ module.exports = [
   }, true],
 
   ['PUT', /^\/api\/produtos\/([0-9a-f-]{36})$/, async (req, [id]) => {
+    // O corpo é lido antes de buscar o produto: entre buscar e gravar não há espera, então nada muda no meio.
+    const corpo = await lerJson(req);
     const produto = acharProduto(id);
-    aplicarCampos(produto, await lerJson(req));
+    aplicarCampos(produto, corpo);
     banco.salvarProduto(produto);
     return produto;
   }, true],
@@ -61,8 +120,8 @@ module.exports = [
   }, true],
 
   ['PUT', /^\/api\/produtos\/([0-9a-f-]{36})\/imagem$/, async (req, [id]) => {
-    const produto = acharProduto(id);
     const { imagem } = await lerJson(req, LIMITE_JSON_COM_FOTO);
+    const produto = acharProduto(id);
     if (imagem) salvarImagem(produto, imagem); else removerImagem(produto);
     banco.salvarProduto(produto);
     return produto;

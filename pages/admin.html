@@ -77,7 +77,16 @@
             <div class="col-6 md:col-3"><button class="btn btn-solid theme-primary w-100">Criar e editar</button></div>
           </div>
         </form>
-        <div class="painel" id="lista-produtos"></div>
+        <div class="painel mb-5" id="lista-produtos"></div>
+        <div class="painel">
+          <h2 class="fs-lg mb-2">Categorias</h2>
+          <p class="suave fs-sm mb-4">Opcional. Com categorias, a página inicial separa os itens em grupos, na ordem desta lista, e o cliente pode filtrar por grupo. Sem nenhuma, tudo aparece em uma lista só. Para colocar um item em uma categoria, use a lista acima.</p>
+          <div id="lista-categorias" class="mb-4"></div>
+          <form id="form-nova-categoria" class="row g-4 align-items-end">
+            <div class="col-8 md:col-6"><label class="form-label" for="nova-categoria">Nova categoria</label><input class="form-control" id="nova-categoria" maxlength="40" required placeholder="Ex.: Novidades, Bebidas, Promoções"></div>
+            <div class="col-4 md:col-3"><button class="btn btn-outline theme-primary w-100">Adicionar</button></div>
+          </form>
+        </div>
       </section>
 
       <section id="aba-aparencia" hidden>

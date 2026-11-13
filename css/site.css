@@ -87,7 +87,13 @@ a.marca, a.marca:hover, div.marca { color: var(--texto-na-faixa); }
 }
 .produto-card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(138, 47, 77, .12); color: inherit; }
 .produto-card .corpo { padding: .85rem 1rem 1rem; display: flex; flex-direction: column; gap: .2rem; flex: 1; }
-.produto-card h3 { font-size: 1.05rem; margin: 0; }
+.produto-card .nome { font-size: 1.05rem; margin: 0; font-family: var(--fonte-titulos); color: var(--tinta); }
+/* Categorias na página inicial: botões de filtro e título de cada grupo */
+.filtros { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: .5rem; }
+.filtros button { border: 1px solid var(--marca-media); background: #fff; color: var(--tinta); border-radius: 999px; padding: .35rem .95rem; font-size: .95rem; cursor: pointer; }
+.filtros button:hover { background: var(--marca); }
+.filtros button[aria-pressed='true'] { background: var(--destaque); border-color: var(--destaque); color: var(--bs-primary-contrast); }
+.titulo-categoria { font-size: 1.3rem; margin: 1.75rem 0 1rem; }
 .produto-card .preco { margin-top: auto; padding-top: .4rem; font-weight: 700; color: var(--destaque-texto); }
 .produto-card.indisponivel { opacity: .6; }
 .foto {

@@ -64,11 +64,33 @@ function apagarConfig(chave) {
   sql('DELETE FROM config WHERE chave = ?').run(chave);
 }
 
+// ---------------------------------------------------------------- categorias
+
+const paraCategoria = (l) => l && { id: l.id, nome: l.nome };
+
+const listarCategorias = () => sql('SELECT * FROM categorias ORDER BY ordem, rowid').all().map(paraCategoria);
+const categoriaPorId = (id) => paraCategoria(sql('SELECT * FROM categorias WHERE id = ?').get(String(id)));
+
+// Cria (no fim da lista) ou troca o nome (pelo id).
+function salvarCategoria(c) {
+  sql(`INSERT INTO categorias (id, nome, ordem) VALUES (?, ?, (SELECT COALESCE(MAX(ordem), 0) + 1 FROM categorias))
+       ON CONFLICT (id) DO UPDATE SET nome = excluded.nome`).run(c.id, c.nome);
+}
+
+// `ids`: todas as categorias, na ordem em que devem aparecer.
+function ordenarCategorias(ids) {
+  transacao(() => ids.forEach((id, posicao) => sql('UPDATE categorias SET ordem = ? WHERE id = ?').run(posicao + 1, id)));
+}
+
+function apagarCategoria(id) {
+  sql('DELETE FROM categorias WHERE id = ?').run(id); // os produtos dela ficam sem categoria (ON DELETE SET NULL)
+}
+
 // ---------------------------------------------------------------- produtos
 
 const paraProduto = (l) => l && {
   id: l.id, slug: l.slug, nome: l.nome, descricao: l.descricao, preco: l.preco,
-  unidade: l.unidade, emoji: l.emoji, imagem: l.imagem, disponivel: Boolean(l.disponivel),
+  unidade: l.unidade, emoji: l.emoji, imagem: l.imagem, disponivel: Boolean(l.disponivel), categoriaId: l.categoria_id,
 };
 
 function listarProdutos({ soDisponiveis = false } = {}) {
@@ -79,12 +101,12 @@ const produtoPorSlug = (slug) => paraProduto(sql('SELECT * FROM produtos WHERE s
 
 // Cria ou atualiza (pelo id).
 function salvarProduto(d) {
-  sql(`INSERT INTO produtos (id, slug, nome, descricao, preco, unidade, emoji, imagem, disponivel)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  sql(`INSERT INTO produtos (id, slug, nome, descricao, preco, unidade, emoji, imagem, disponivel, categoria_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (id) DO UPDATE SET slug = excluded.slug, nome = excluded.nome, descricao = excluded.descricao,
          preco = excluded.preco, unidade = excluded.unidade, emoji = excluded.emoji, imagem = excluded.imagem,
-         disponivel = excluded.disponivel`)
-    .run(d.id, d.slug, d.nome, d.descricao, d.preco, d.unidade, d.emoji, d.imagem, d.disponivel ? 1 : 0);
+         disponivel = excluded.disponivel, categoria_id = excluded.categoria_id`)
+    .run(d.id, d.slug, d.nome, d.descricao, d.preco, d.unidade, d.emoji, d.imagem, d.disponivel ? 1 : 0, d.categoriaId || null);
 }
 
 function apagarProduto(id) {
@@ -211,6 +233,7 @@ importarJsonAntigo();
 
 module.exports = {
   DATA_DIR, ARQUIVO, transacao, lerConfig, gravarConfig, apagarConfig,
+  listarCategorias, categoriaPorId, salvarCategoria, ordenarCategorias, apagarCategoria,
   listarProdutos, produtoPorId, produtoPorSlug, salvarProduto, apagarProduto,
   listarClientes, clientePorId, clientePorEmail, salvarCliente,
   inserirPedido, listarPedidos, pedidoPorId, mudarStatusPedido, contarPedidosComStatus, apagarPedidosDemo,

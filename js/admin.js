@@ -207,11 +207,27 @@ App.pronto.then(async ({ loja, admin, catalogo, atendimento }) => {
   el('busca-cliente').addEventListener('input', desenharClientes);
 
   // ------------------------------------------------------------ produtos
+  let categorias = [];
+
   async function carregarProdutos() {
-    const produtos = await api('/api/produtos');
+    const [produtos, lista] = await Promise.all([api('/api/produtos'), api('/api/categorias')]);
+    categorias = lista;
+    const seletorCategoria = (d) => (categorias.length ? `
+        <select class="form-control" data-categoria="${d.id}" aria-label="Categoria de ${esc(d.nome)}" style="width: auto; max-width: 12rem">
+          <option value="">Sem categoria</option>
+          ${categorias.map((c) => `<option value="${c.id}"${c.id === d.categoriaId ? ' selected' : ''}>${esc(c.nome)}</option>`).join('')}
+        </select>` : '');
+    el('lista-categorias').innerHTML = categorias.length ? categorias.map((c, i) => `
+      <div class="linha-produto">
+        <input class="form-control nome" data-nome-categoria="${c.id}" maxlength="40" required value="${esc(c.nome)}" aria-label="Nome da categoria ${esc(c.nome)}">
+        <button type="button" class="btn btn-outline theme-primary btn-sm" data-mover="${i}" data-passo="-1" aria-label="Subir ${esc(c.nome)}" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="btn btn-outline theme-primary btn-sm" data-mover="${i}" data-passo="1" aria-label="Descer ${esc(c.nome)}" ${i === categorias.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" class="botao-texto" data-excluir-categoria="${c.id}" data-nome="${esc(c.nome)}">Excluir</button>
+      </div>`).join('') : '<p class="suave mb-0">Nenhuma categoria criada.</p>';
     el('lista-produtos').innerHTML = produtos.length ? produtos.map((d) => `
       <div class="linha-produto">
         <span class="nome">${esc(d.emoji)} ${esc(d.nome)} <span class="suave fw-normal">· ${brl(d.preco)}</span></span>
+        ${seletorCategoria(d)}
         <label class="d-flex gap-2 align-items-center fs-sm"><input type="checkbox" data-disponivel="${d.id}" ${d.disponivel ? 'checked' : ''}> Disponível</label>
         <a class="btn btn-outline theme-primary btn-sm" href="/produto/${esc(d.slug)}?editar">Editar</a>
         <button type="button" class="botao-texto" data-excluir="${d.id}" data-nome="${esc(d.nome)}">Excluir</button>
@@ -219,12 +235,57 @@ App.pronto.then(async ({ loja, admin, catalogo, atendimento }) => {
   }
 
   el('lista-produtos').addEventListener('change', async (evento) => {
-    const id = evento.target.dataset.disponivel;
-    if (!id) return;
+    const { disponivel, categoria } = evento.target.dataset;
     try {
-      await api(`/api/produtos/${id}`, { metodo: 'PUT', corpo: { disponivel: evento.target.checked } });
-      aviso(evento.target.checked ? 'Visível para os clientes.' : 'Oculto para os clientes.');
-    } catch (erro) { tratarErro(erro); }
+      if (disponivel) {
+        await api(`/api/produtos/${disponivel}`, { metodo: 'PUT', corpo: { disponivel: evento.target.checked } });
+        aviso(evento.target.checked ? 'Visível para os clientes.' : 'Oculto para os clientes.');
+      } else if (categoria) {
+        await api(`/api/produtos/${categoria}`, { metodo: 'PUT', corpo: { categoriaId: evento.target.value } });
+        aviso('Categoria alterada.');
+      }
+    } catch (erro) {
+      tratarErro(erro);
+      carregarProdutos().catch(tratarErro); // a tela volta a mostrar o que está gravado
+    }
+  });
+
+  // ---- categorias
+  // Depois de cada alteração a aba é recarregada: a lista de categorias também aparece em cada produto.
+  async function alterarCategorias(pedido, mensagem) {
+    try {
+      await pedido();
+      await carregarProdutos();
+      if (mensagem) aviso(mensagem);
+    } catch (erro) {
+      tratarErro(erro);
+      carregarProdutos().catch(tratarErro);
+    }
+  }
+
+  el('form-nova-categoria').addEventListener('submit', (evento) => {
+    evento.preventDefault();
+    alterarCategorias(async () => {
+      await api('/api/categorias', { metodo: 'POST', corpo: { nome: el('nova-categoria').value } });
+      el('nova-categoria').value = '';
+    }, 'Categoria criada.');
+  });
+
+  el('lista-categorias').addEventListener('change', (evento) => {
+    const id = evento.target.dataset.nomeCategoria;
+    if (id) alterarCategorias(() => api(`/api/categorias/${id}`, { metodo: 'PUT', corpo: { nome: evento.target.value } }), 'Nome alterado.');
+  });
+
+  el('lista-categorias').addEventListener('click', (evento) => {
+    const { mover, passo, excluirCategoria, nome } = evento.target.dataset;
+    if (mover !== undefined) {
+      const ids = categorias.map((c) => c.id);
+      const de = Number(mover), para = de + Number(passo);
+      [ids[de], ids[para]] = [ids[para], ids[de]];
+      alterarCategorias(() => api('/api/categorias/ordem', { metodo: 'PUT', corpo: { ids } }));
+    } else if (excluirCategoria && confirm(`Excluir a categoria "${nome}"? Os itens dela continuam cadastrados, sem categoria.`)) {
+      alterarCategorias(() => api(`/api/categorias/${excluirCategoria}`, { metodo: 'DELETE' }), 'Categoria excluída.');
+    }
   });
 
   el('lista-produtos').addEventListener('click', async (evento) => {

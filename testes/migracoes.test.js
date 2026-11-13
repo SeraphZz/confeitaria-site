@@ -116,7 +116,7 @@ test('migração 002: "doces" vira "produtos" sem perder nada, e a loja antiga m
   aplicar(db, { pastaBackups: backups(), log: silencio });
 
   assert.ok(!tabelas().includes('doces'));
-  assert.deepEqual({ ...db.prepare('SELECT * FROM produtos').get() }, {
+  assert.deepEqual({ ...db.prepare('SELECT id, slug, nome, descricao, preco, unidade, emoji, imagem, disponivel FROM produtos').get() }, {
     id: 'd1', slug: 'bolo-de-fuba', nome: 'Bolo de fubá', descricao: 'Fofinho', preco: 4500, unidade: 'unidade', emoji: '🌽', imagem: '/uploads/d1-1.jpg', disponivel: 0,
   });
   assert.deepEqual(db.prepare('SELECT produto_id, nome, quantidade FROM pedido_itens ORDER BY rowid').all().map((l) => ({ ...l })), [
@@ -131,6 +131,20 @@ test('migração 002: banco novo não recebe vocabulário de confeitaria', () =>
   aplicar(db, { log: silencio });
   assert.ok(tabelas().includes('produtos'));
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM config WHERE chave = 'catalogo'").get().n, 0);
+});
+
+test('migração 003: produtos que já existiam ficam sem categoria; apagar a categoria não apaga o produto', () => {
+  const migracoes = carregarMigracoes();
+  aplicar(db, { migracoes: migracoes.slice(0, 2), log: silencio });
+  db.exec("INSERT INTO produtos (id, slug, nome, preco, unidade, emoji) VALUES ('p1', 'bolo', 'Bolo', 5000, 'unidade', '🎂')");
+
+  aplicar(db, { migracoes, log: silencio });
+  assert.equal(db.prepare("SELECT categoria_id FROM produtos WHERE id = 'p1'").get().categoria_id, null);
+
+  db.exec("INSERT INTO categorias (id, nome, ordem) VALUES ('c1', 'Bolos', 1); UPDATE produtos SET categoria_id = 'c1'");
+  assert.throws(() => db.exec("UPDATE produtos SET categoria_id = 'nao-existe'"), /FOREIGN KEY/);
+  db.exec("DELETE FROM categorias WHERE id = 'c1'");
+  assert.deepEqual({ ...db.prepare('SELECT nome, categoria_id FROM produtos').get() }, { nome: 'Bolo', categoria_id: null });
 });
 
 test('arquivos de migração fora de sequência são recusados', () => {

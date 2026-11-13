@@ -28,8 +28,9 @@ Os dados ficam em um banco SQLite, o arquivo `data/loja.db`. As fotos ficam em `
 
 ## O que a loja consegue fazer logada
 
-- **Editar um produto na própria página dele** (botão "Editar"): nome, preço, descrição, foto, disponibilidade.
+- **Editar um produto na própria página dele** (botão "Editar"): nome, preço, descrição, foto, categoria, disponibilidade.
 - Criar, ocultar e excluir produtos no Painel, na aba que leva o nome escolhido pela loja (Doces, Pratos, Produtos...).
+- Organizar os produtos em categorias (Bolos, Bebidas...), na mesma aba: criar, renomear, ordenar e excluir. Com categorias, a página inicial separa os produtos em grupos, na ordem escolhida, com botões para filtrar; sem nenhuma, fica uma lista só. Excluir uma categoria não apaga os produtos dela.
 - Editar a página Sobre (história e trajetória) no próprio lugar.
 - Ver os pedidos por pessoa em Painel > Clientes (total gasto, quantidade e histórico de cada cliente).
 - Acompanhar pedidos e mudar o status (Novo → Confirmado → Em produção → Pronto → Entregue / Cancelado).
