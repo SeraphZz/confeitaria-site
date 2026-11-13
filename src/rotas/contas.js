@@ -11,6 +11,7 @@ const { enviarLinkRedefinicao, conferirToken } = require('../redefinicao');
 const configuracoes = require('../configuracoes');
 const auditoria = require('../auditoria');
 const { temaPara, temRascunho } = require('../aparencia');
+const statusPedido = require('../status');
 
 // Hash de uma senha que ninguém conhece, para o login gastar o mesmo tempo quando a conta não existe.
 const CONTA_FALSA = gerarHash(sortearSenha());
@@ -35,6 +36,9 @@ module.exports = [
       usuario: usuario && { nome: usuario.nome, usuario: usuario.usuario, permissoes: [...usuario.permissoes], senhaInicial: usuario.senhaInicial },
       // Quem cuida da aparência navega vendo o rascunho, se houver; `previaTema` avisa a tela disso.
       tema: temaPara(vePrevia), previaTema: vePrevia && temRascunho(),
+      // Os status de pedido da loja, na ordem dela, para as telas mostrarem o nome. Só a equipe recebe o resto
+      // (qual é o inicial e para onde cada um pode ir).
+      statusPedidos: statusPedido.listar().map((s) => (usuario ? s : { id: s.id, nome: s.nome, tipo: s.tipo })),
     };
   }],
 
@@ -136,7 +140,11 @@ module.exports = [
     // Do mais novo para o mais antigo, uma página por vez (?pagina=2...).
     const numero = lerPagina(url);
     const { pedidos, total } = banco.paginarPedidos({ clienteId: cliente.id, pagina: numero, porPagina: PEDIDOS_POR_PAGINA });
-    const resumidos = pedidos.map(({ numero: n, criadoEm, entrega, itens, total: valor, status }) => ({ numero: n, criadoEm, entrega, itens, total: valor, status }));
+    // O cliente vê por quais status o pedido passou e quando; quem mudou e as observações são internos da loja.
+    const resumidos = pedidos.map(({ numero: n, criadoEm, entrega, itens, total: valor, status, historico }) => ({
+      numero: n, criadoEm, entrega, itens, total: valor, status,
+      historico: historico.map((h) => ({ em: h.em, status: h.para, nome: h.paraNome })),
+    }));
     return pagina(resumidos, total, numero, PEDIDOS_POR_PAGINA);
   }],
 

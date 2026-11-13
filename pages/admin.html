@@ -57,10 +57,26 @@
       </section>
 
       <section id="aba-pedidos" hidden>
-        <div class="d-flex flex-wrap align-items-center gap-3 mb-5">
-          <label for="filtro-status" class="fw-semibold">Mostrar</label>
-          <select id="filtro-status" class="form-control" style="max-width: 14rem"></select>
-        </div>
+        <form class="painel mb-5" id="filtros-pedidos">
+          <div class="row g-4 align-items-end">
+            <div class="col-12 lg:col-4"><label class="form-label" for="busca-pedido">Buscar</label>
+              <input id="busca-pedido" class="form-control" type="search" maxlength="80" placeholder="Nome, telefone, item ou nº do pedido"></div>
+            <div class="col-6 lg:col-2"><label class="form-label" for="filtro-status">Status</label>
+              <select id="filtro-status" class="form-control"></select></div>
+            <div class="col-6 lg:col-2"><label class="form-label" for="filtro-entrega">Como recebe</label>
+              <select id="filtro-entrega" class="form-control">
+                <option value="">Tanto faz</option><option value="retirada">Retirada</option><option value="entrega">Entrega</option>
+              </select></div>
+            <div class="col-6 lg:col-2"><label class="form-label" for="filtro-de">Marcado de</label>
+              <input id="filtro-de" class="form-control" type="date"></div>
+            <div class="col-6 lg:col-2"><label class="form-label" for="filtro-ate">até</label>
+              <input id="filtro-ate" class="form-control" type="date"></div>
+          </div>
+          <div class="d-flex flex-wrap align-items-center gap-3 mt-4">
+            <span class="suave fs-sm" id="total-pedidos" role="status"></span>
+            <button type="button" class="botao-texto" id="limpar-filtros" hidden>Limpar filtros</button>
+          </div>
+        </form>
         <div id="lista-pedidos"></div>
         <button type="button" class="btn btn-outline theme-primary" id="mais-pedidos" hidden>Carregar mais pedidos</button>
       </section>
@@ -303,6 +319,15 @@
               <label class="d-flex gap-2 align-items-baseline mb-5"><input type="checkbox" id="modulos-estoque">
                 <span><strong>Estoque</strong><br><span class="suave fs-sm">Você informa quanto tem de cada item. Cada pedido diminui o estoque, o item esgotado não pode ser pedido, e cancelar um pedido devolve a quantidade.</span></span></label>
               <button class="btn btn-solid theme-primary">Salvar</button>
+            </form>
+            <form class="painel mt-5" id="form-status">
+              <h2 class="fs-lg mb-2">Status dos pedidos</h2>
+              <p class="suave fs-sm mb-4">As etapas por que um pedido passa na sua loja, na ordem em que aparecem nas listas. Em cada uma, marque para quais outras o pedido pode ir: o painel só oferece essas, e o servidor recusa o resto. O <strong>tipo</strong> diz ao sistema o que o status significa: "em aberto" ainda tem o que fazer; "concluído" terminou bem; "cancelado" sai da receita e devolve o estoque.</p>
+              <div id="lista-status"></div>
+              <div class="d-flex flex-wrap gap-3 mt-4">
+                <button type="button" class="btn btn-outline theme-primary" id="novo-status">+ Adicionar status</button>
+                <button class="btn btn-solid theme-primary">Salvar status</button>
+              </div>
             </form>
           </div>
           <div class="col-12 lg:col-5">

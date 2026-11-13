@@ -35,7 +35,7 @@ Os dados ficam em um banco SQLite, o arquivo `data/loja.db`. As fotos ficam em `
 - Ligar recursos opcionais em Configurações: **variações** (o mesmo produto em opções com preço próprio), **adicionais** (extras somados ao preço) e **estoque** (ver abaixo).
 - Editar a página Sobre (história e trajetória) no próprio lugar.
 - Ver os pedidos por pessoa em Painel > Clientes (total gasto, quantidade e histórico de cada cliente).
-- Acompanhar pedidos e mudar o status (Novo → Confirmado → Em produção → Pronto → Entregue / Cancelado).
+- Acompanhar pedidos, com busca e filtros, e mudar o status de cada um. Os status são da loja: ela escolhe os nomes, a ordem e para onde um pedido pode ir a partir de cada um (ver "Pedidos: status, histórico e busca").
 - Ver receita por dia, ticket médio e produtos que mais renderam (7, 30 ou 90 dias).
 - Trocar nome da loja, contatos, endereço, horários, formas de entrega, senha e o nome dado aos produtos em Configurações.
 - Dar acesso ao painel a outras pessoas, cada uma com o próprio usuário e só com as permissões do perfil dela (Equipe), e ver quem fez o quê (Atividade).
@@ -89,6 +89,7 @@ src/catalogo.js  recursos opcionais do catálogo: variações, adicionais e esto
 src/permissoes.js  lista de permissões da equipe e como se calcula o que cada pessoa pode fazer
 src/equipe.js    regras para criar e alterar pessoas e perfis
 src/auditoria.js registro de atividades da equipe
+src/status.js    status dos pedidos: os que a loja criou e as transições permitidas
 src/*.js         sessão, senhas, validação, datas, regras de pedidos, imagens e arquivos estáticos
 banco.js         camada de dados (SQLite): todas as consultas
 migracoes/       estrutura das tabelas, em arquivos numerados (ver abaixo)
@@ -183,6 +184,24 @@ Cada pessoa da equipe entra no painel com o próprio usuário e senha (Painel > 
 - **Sessões.** Ficam no banco (tabela `sessoes`), com validade de 12 horas, então reiniciar o servidor não desloga ninguém. O banco guarda só o SHA-256 do token do cookie: quem ler o banco ou um backup não consegue entrar como ninguém.
 - **Loja que já existia:** a conta de acesso anterior vira o primeiro Administrador, com o mesmo usuário e a mesma senha.
 
+## Pedidos: status, histórico e busca
+
+**Status da loja (Painel > Configurações > Status dos pedidos).** A instalação traz Novo, Confirmado, Em produção, Pronto, Entregue e Cancelado; a loja pode renomear, reordenar, criar (ex.: "Saiu para entrega") e excluir. De 2 a 15 status.
+
+- **Tipo.** É o que o sistema precisa saber de um status, seja qual for o nome: *em aberto* (ainda há o que fazer; entra em "Em aberto"), *concluído* (terminou bem) ou *cancelado* (sai da receita e devolve o estoque).
+- **Status inicial.** Um status em aberto é marcado como o inicial: todo pedido novo começa nele.
+- **Transições.** Em cada status a loja marca para quais outros o pedido pode ir. O painel só oferece esses, e o servidor recusa qualquer outra mudança (resposta 409, com a lista do que é permitido). De partida, de um status em aberto dá para ir a qualquer outro; de "Entregue" só se volta para "Pronto", e de "Cancelado", para "Novo" (para desfazer um engano). Um status criado depois não ganha transição sozinho: é preciso marcar de onde se chega nele.
+- **O que o sistema não deixa:** excluir um status que tem pedidos, ou mudar o tipo dele (os pedidos ficariam contados errado); ficar sem status inicial; deixar um status em aberto sem saída. Renomear pode sempre.
+- As regras ficam em `src/status.js`.
+
+**Histórico do pedido.** Cada mudança de status fica guardada: de onde, para onde, quando, quem da equipe fez e uma observação opcional (o painel pede o motivo ao cancelar). No painel, cada pedido mostra o histórico; o cliente vê em "Minha conta" por quais etapas o pedido passou e quando, sem o nome de quem mudou nem as observações.
+
+- A tabela `pedido_historico` é só de inserção, como o registro de atividades: gatilhos do banco recusam alterar, apagar ou substituir uma linha. A única exceção são os pedidos de exemplo (`scripts/demo.js`), que são apagados inteiros.
+- O histórico guarda os nomes da época: continua legível se o status for renomeado ou excluído.
+- Pedidos feitos antes desta versão não têm histórico (nada é inventado sobre o passado): ele começa na próxima mudança.
+
+**Busca e filtros (Painel > Pedidos).** Tudo é feito no servidor, em todos os pedidos, e os filtros somam: texto (nome do cliente, nome de um item, telefone ou número do pedido; maiúsculas e acentos não importam), status ("Em aberto", "Todos" ou um status), forma de receber (retirada ou entrega) e a data marcada para a entrega ou retirada (de/até). Na API: `GET /api/pedidos?busca=ana&status=abertos&entrega=retirada&de=2026-11-01&ate=2026-11-30&pagina=1`.
+
 ## Registro de atividades
 
 Painel > Atividade mostra o que a equipe fez: quem entrou (e as tentativas recusadas em contas da equipe), e tudo o que foi criado, alterado ou excluído, com data, pessoa, alvo e um resumo do que mudou (por exemplo, o status de um pedido de "Novo" para "Confirmado").
@@ -198,7 +217,7 @@ Painel > Atividade mostra o que a equipe fez: quem entrou (e as tentativas recus
 - **Pedidos vindos de outro site são recusados.** Tudo o que altera dados (login, pedido, cadastro, painel) só é aceito se saiu de uma página do próprio site: o servidor confere o cabeçalho `Origin` (ou `Sec-Fetch-Site`) contra o endereço pelo qual o pedido chegou e contra o `SITE_URL`. Isso impede que uma página qualquer, aberta no navegador de quem está logado, aja em nome dessa pessoa. Atrás de um proxy que troque o cabeçalho `Host`, configure o `SITE_URL` com o endereço público.
 - **HTTPS obrigatório em produção.** Com `NODE_ENV=production`, todas as respostas levam `Strict-Transport-Security` (um ano): depois da primeira visita, o navegador só acessa o site por HTTPS.
 - **Limite de tentativas por IP e por conta.** Além do limite por IP, cada conta (clientes e painel) aceita 10 erros de senha em 15 minutos, somando todos os IPs; depois disso fica bloqueada por 15 minutos, mesmo para a senha certa. Acertar a senha zera a contagem. A contagem fica em memória: reiniciar o servidor libera na hora.
-- **Listas paginadas.** Pedidos e clientes do painel vêm 30 por vez, e o histórico do cliente, 20 por vez ("Carregar mais"). O filtro de status e a busca de clientes são feitos no servidor.
+- **Listas paginadas.** Pedidos e clientes do painel vêm 30 por vez, e o histórico do cliente, 20 por vez ("Carregar mais"). A busca e os filtros de pedidos e a busca de clientes são feitos no servidor.
 - Senhas com hash e sal, sessão em cookie `HttpOnly` e `SameSite=Lax`, política de conteúdo (CSP) sem scripts de fora, e preços sempre calculados no servidor.
 
 ## Limites conhecidos (de propósito, para manter simples)

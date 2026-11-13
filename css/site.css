@@ -213,3 +213,10 @@ details.pedido[open] > summary { padding-bottom: .5rem; border-bottom: 1px solid
 /* Painel > Configurações: tabela de horários */
 .tabela-horarios td, .tabela-horarios th { text-align: left !important; white-space: nowrap; }
 .tabela-horarios input[type='time'] { min-width: 6.5rem; }
+
+/* Pedidos: andamento (histórico de status) e, no painel, a configuração dos status */
+.andamento { list-style: none; margin: .5rem 0 0; padding: 0 0 0 .9rem; border-left: 2px solid var(--marca-media); font-size: .9rem; }
+.andamento li { padding: .2rem 0; }
+.andamento li > span:first-child { display: inline-block; min-width: 7.5rem; }
+.cartao-status { border: 1px solid var(--marca); border-radius: .75rem; padding: .75rem .9rem; margin-bottom: .75rem; }
+.cartao-status .destinos { display: flex; flex-wrap: wrap; gap: .25rem 1rem; margin-top: .5rem; font-size: .9rem; }

@@ -62,7 +62,7 @@ test('cada alteração da equipe é registrada com quem fez, em quê e o que mud
   const [pedido] = (await dona.get('/api/pedidos')).dados.itens;
 
   await dona.patch(`/api/pedidos/${pedido.id}`, { status: 'confirmado' });
-  assert.deepEqual([resumo(await ultimo()), (await ultimo()).detalhes], [['confeiteira', 'Alterou o status de um pedido', `Pedido nº ${pedido.numero}`], { de: 'novo', para: 'confirmado' }]);
+  assert.deepEqual([resumo(await ultimo()), (await ultimo()).detalhes], [['confeiteira', 'Alterou o status de um pedido', `Pedido nº ${pedido.numero}`], { de: 'Novo', para: 'Confirmado' }]);
 
   await dona.put(`/api/produtos/${produto.id}`, { preco: 990, disponivel: false });
   assert.deepEqual([resumo(await ultimo()), (await ultimo()).detalhes], [['confeiteira', 'Alterou um produto', produto.nome], { campos: ['preco', 'disponivel'], preco: 990, disponivel: false, estoque: null }]);

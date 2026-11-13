@@ -240,7 +240,7 @@ test('estoque: cancelar devolve; reabrir tira de novo, e é recusado se não hou
   const cancelado = await mudarStatus(pedido, 'cancelado');
   assert.deepEqual([cancelado.status, cancelado.dados.status, cancelado.dados.itens[0].estoqueSituacao], [200, 'cancelado', 2]);
   assert.equal((await ver(p)).estoque, 2);
-  await mudarStatus(pedido, 'cancelado'); // cancelar de novo não devolve em dobro
+  assert.equal((await mudarStatus(pedido, 'cancelado')).status, 409); // já está cancelado: nada é devolvido em dobro
   assert.equal((await ver(p)).estoque, 2);
 
   const reaberto = await mudarStatus(pedido, 'novo');
@@ -250,7 +250,7 @@ test('estoque: cancelar devolve; reabrir tira de novo, e é recusado se não hou
   // Cancelado de novo, outra pessoa leva uma unidade: não dá mais para reabrir, e nada muda.
   await mudarStatus(pedido, 'cancelado');
   assert.equal((await pedir([{ produtoId: p.id, quantidade: 1 }])).status, 200);
-  const recusado = await mudarStatus(pedido, 'confirmado');
+  const recusado = await mudarStatus(pedido, 'novo'); // de "Cancelado" só se volta para "Novo"
   assert.equal(recusado.status, 409);
   assert.match(recusado.dados.erro, /só restam 1/);
   assert.equal((await ver(p)).estoque, 1);
@@ -258,7 +258,7 @@ test('estoque: cancelar devolve; reabrir tira de novo, e é recusado se não hou
 
   // A loja repõe o estoque e então consegue reabrir.
   await editar(p, { estoque: 5 });
-  assert.equal((await mudarStatus(pedido, 'confirmado')).status, 200);
+  assert.equal((await mudarStatus(pedido, 'novo')).status, 200);
   assert.equal((await ver(p)).estoque, 3);
 });
 

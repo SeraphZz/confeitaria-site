@@ -22,6 +22,11 @@ db.exec(`
 // A estrutura das tabelas fica em migracoes/: aqui só são aplicadas as que ainda faltam neste banco.
 require('./migracoes').aplicar(db, { pastaBackups: path.join(DATA_DIR, 'backups') });
 
+// Para as buscas: minúsculas e sem acento ("João" casa com "joao"). O LIKE do SQLite só ignora maiúsculas em letras
+// sem acento, por isso a comparação é feita com esta função dos dois lados.
+const semAcento = (valor) => String(valor ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+db.function('sem_acento', { deterministic: true }, semAcento);
+
 // Toda consulta passa por aqui: o SQL é sempre texto fixo e os valores vão separados, como parâmetros (?).
 const preparadas = new Map();
 function sql(textoSql) {
@@ -244,11 +249,21 @@ function buscarPedidos(filtro = '', parametros = []) {
       variacaoId: i.variacao_id, variacao: i.variacao, adicionais: JSON.parse(i.adicionais), estoqueSituacao: i.estoque_situacao,
     });
   }
+  // O histórico de cada pedido (mudanças de status), do mais antigo para o mais novo.
+  const historico = new Map();
+  const linhasHistorico = sql(`SELECT h.* FROM pedido_historico h JOIN pedidos p ON p.numero = h.pedido_numero ${filtro} ORDER BY h.id`).all(...parametros);
+  for (const h of linhasHistorico) {
+    if (!historico.has(h.pedido_numero)) historico.set(h.pedido_numero, []);
+    historico.get(h.pedido_numero).push({
+      em: h.em, de: h.de, deNome: h.de_nome, para: h.para, paraNome: h.para_nome, por: h.usuario_nome, observacao: h.observacao,
+    });
+  }
   return sql(`SELECT p.* FROM pedidos p ${filtro} ORDER BY p.criado_em, p.numero`).all(...parametros).map((p) => ({
     id: p.id, numero: p.numero, criadoEm: p.criado_em, clienteId: p.cliente_id,
     cliente: { nome: p.cliente_nome, telefone: p.cliente_telefone },
     entrega: { tipo: p.entrega_tipo, data: p.entrega_data, endereco: p.entrega_endereco },
     itens: itens.get(p.numero) || [], observacoes: p.observacoes, total: p.total, status: p.status,
+    historico: historico.get(p.numero) || [],
   }));
 }
 
@@ -259,13 +274,38 @@ function listarPedidos({ clienteId, desde } = {}) {
   return buscarPedidos();
 }
 
-// Uma página de pedidos, do mais novo para o mais antigo, e o total que casa com o filtro.
-// `status`: lista de status aceitos (omitir = todos); `clienteId`: só os pedidos de um cliente.
-function paginarPedidos({ status, clienteId, pagina = 1, porPagina }) {
+// Uma página de pedidos, do mais novo para o mais antigo, e o total que casa com o filtro. Todos os filtros são
+// opcionais e somam (E):
+//   status       lista de status aceitos;
+//   clienteId    só os pedidos de um cliente;
+//   busca        texto: nome do cliente, nome de um item, telefone (3 dígitos ou mais) ou o número do pedido;
+//   entregaTipo  'retirada' ou 'entrega';
+//   de, ate      data marcada para a entrega ou retirada (AAAA-MM-DD), inclusive.
+function paginarPedidos({ status, clienteId, busca, entregaTipo, de, ate, pagina = 1, porPagina }) {
   const condicoes = [];
   const parametros = [];
   if (clienteId) { condicoes.push('p.cliente_id = ?'); parametros.push(clienteId); }
-  if (status) { condicoes.push(`p.status IN (${status.map(() => '?').join(', ')})`); parametros.push(...status); }
+  if (status) {
+    if (!status.length) return { pedidos: [], total: 0 };
+    condicoes.push(`p.status IN (${status.map(() => '?').join(', ')})`);
+    parametros.push(...status);
+  }
+  if (entregaTipo) { condicoes.push('p.entrega_tipo = ?'); parametros.push(entregaTipo); }
+  if (de) { condicoes.push('p.entrega_data >= ?'); parametros.push(de); }
+  if (ate) { condicoes.push('p.entrega_data <= ?'); parametros.push(ate); }
+  if (busca) {
+    // % e _ digitados na busca valem como texto, não como curingas.
+    const trecho = `%${semAcento(busca).replace(/[\\%_]/g, '\\$&')}%`;
+    const ou = [
+      "sem_acento(p.cliente_nome) LIKE ? ESCAPE '\\'",
+      "EXISTS (SELECT 1 FROM pedido_itens i WHERE i.pedido_numero = p.numero AND sem_acento(i.nome) LIKE ? ESCAPE '\\')",
+    ];
+    parametros.push(trecho, trecho);
+    const digitos = busca.replace(/\D/g, '');
+    if (digitos.length >= 3) { ou.push('p.cliente_telefone LIKE ?'); parametros.push(`%${digitos}%`); }
+    if (/^(nº|n\.|#)?\s*\d{1,9}$/i.test(busca.trim())) { ou.push('p.numero = ?'); parametros.push(Number(digitos)); }
+    condicoes.push(`(${ou.join(' OR ')})`);
+  }
   const filtro = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '';
 
   const total = sql(`SELECT COUNT(*) AS n FROM pedidos p ${filtro}`).get(...parametros).n;
@@ -282,11 +322,59 @@ function mudarStatusPedido(id, status) {
 }
 
 function contarPedidosComStatus(lista) {
+  if (!lista.length) return 0;
   return sql(`SELECT COUNT(*) AS n FROM pedidos WHERE status IN (${lista.map(() => '?').join(', ')})`).get(...lista).n;
 }
 
 function apagarPedidosDemo() {
-  sql('DELETE FROM pedidos WHERE demo = 1').run(); // os itens vão junto (ON DELETE CASCADE)
+  transacao(() => {
+    // O histórico só aceita ser apagado enquanto o pedido de exemplo ainda existe: por isso vai antes.
+    sql('DELETE FROM pedido_historico WHERE pedido_numero IN (SELECT numero FROM pedidos WHERE demo = 1)').run();
+    sql('DELETE FROM pedidos WHERE demo = 1').run(); // os itens vão junto (ON DELETE CASCADE)
+  });
+}
+
+// Uma linha do histórico do pedido. Só existe inserir: o banco recusa alterar e apagar (migração 007).
+function inserirHistorico({ pedidoNumero, de, deNome, para, paraNome, usuarioId, usuarioNome, observacao }) {
+  sql(`INSERT INTO pedido_historico (pedido_numero, em, de, de_nome, para, para_nome, usuario_id, usuario_nome, observacao)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(pedidoNumero, new Date().toISOString(), de, deNome, para, paraNome, usuarioId || null, usuarioNome || '', observacao || '');
+}
+
+// ---------------------------------------------------------------- status de pedido e transições
+
+// Na ordem que a loja escolheu. `destinos`: para quais status um pedido neste status pode ir.
+function listarStatus() {
+  const destinos = new Map();
+  for (const { de, para } of sql('SELECT t.de, t.para FROM status_transicoes t JOIN status_pedido s ON s.id = t.para ORDER BY s.ordem').all()) {
+    if (!destinos.has(de)) destinos.set(de, []);
+    destinos.get(de).push(para);
+  }
+  return sql('SELECT * FROM status_pedido ORDER BY ordem, rowid').all().map((s) => ({
+    id: s.id, nome: s.nome, tipo: s.tipo, inicial: Boolean(s.inicial), destinos: destinos.get(s.id) || [],
+  }));
+}
+
+// { id do status: quantos pedidos estão nele }
+function pedidosPorStatus() {
+  return Object.fromEntries(sql('SELECT status, COUNT(*) AS n FROM pedidos GROUP BY status').all().map((l) => [l.status, l.n]));
+}
+
+// Troca a lista inteira de status pela que chegou (já conferida em src/status.js): some o que não veio, entra o que
+// é novo, e as transições são refeitas.
+function salvarStatus(lista) {
+  transacao(() => {
+    const ids = lista.map((s) => s.id);
+    sql('DELETE FROM status_transicoes').run();
+    sql(`DELETE FROM status_pedido WHERE id NOT IN (${ids.map(() => '?').join(', ')})`).run(...ids);
+    sql('UPDATE status_pedido SET inicial = 0').run(); // só um pode ser o inicial: zera antes de marcar o novo
+    lista.forEach((s, ordem) => {
+      sql(`INSERT INTO status_pedido (id, nome, tipo, inicial, ordem) VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET nome = excluded.nome, tipo = excluded.tipo, inicial = excluded.inicial, ordem = excluded.ordem`)
+        .run(s.id, s.nome, s.tipo, s.inicial ? 1 : 0, ordem);
+    });
+    for (const s of lista) for (const para of s.destinos) sql('INSERT INTO status_transicoes (de, para) VALUES (?, ?)').run(s.id, para);
+  });
 }
 
 // ---------------------------------------------------------------- equipe: perfis e usuários
@@ -439,6 +527,7 @@ module.exports = {
   baixarEstoque, devolverEstoque, trocarSituacaoEstoque,
   listarClientes, clientePorId, clientePorEmail, salvarCliente,
   inserirPedido, listarPedidos, paginarPedidos, pedidoPorId, mudarStatusPedido, contarPedidosComStatus, apagarPedidosDemo,
+  inserirHistorico, listarStatus, pedidosPorStatus, salvarStatus,
   listarPerfis, perfilPorId, perfilDeSistema, usuariosNoPerfil, salvarPerfil, apagarPerfil,
   listarUsuarios, usuarioPorId, usuarioPorLogin, contarUsuarios, contarAdministradoresAtivos, salvarUsuario,
   inserirAuditoria, paginarAuditoria,

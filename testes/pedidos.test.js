@@ -101,7 +101,7 @@ test('cliente vê só os próprios pedidos, sem dados internos', async () => {
 
   const meus = (await cliente.get('/api/conta/pedidos')).dados.itens;
   assert.deepEqual(meus.map((p) => p.numero), [2, 1]);
-  assert.deepEqual(Object.keys(meus[0]).sort(), ['criadoEm', 'entrega', 'itens', 'numero', 'status', 'total']);
+  assert.deepEqual(Object.keys(meus[0]).sort(), ['criadoEm', 'entrega', 'historico', 'itens', 'numero', 'status', 'total']);
 });
 
 test('painel: a loja lista os pedidos do mais novo para o mais antigo', async () => {

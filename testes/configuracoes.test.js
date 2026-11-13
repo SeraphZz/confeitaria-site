@@ -39,8 +39,10 @@ test('datas: o dia depende do fuso da loja, não do servidor', () => {
 
 test('visitante recebe só as seções públicas', async () => {
   const r = await visitante.get('/api/site');
-  assert.deepEqual(Object.keys(r.dados).sort(), ['admin', 'atendimento', 'catalogo', 'cliente', 'loja', 'modulos', 'previaTema', 'sobre', 'tema', 'usuario']);
+  assert.deepEqual(Object.keys(r.dados).sort(), ['admin', 'atendimento', 'catalogo', 'cliente', 'loja', 'modulos', 'previaTema', 'sobre', 'statusPedidos', 'tema', 'usuario']);
   assert.equal(r.dados.usuario, null);
+  // Dos status de pedido, o visitante recebe só o necessário para mostrar o nome.
+  assert.deepEqual(r.dados.statusPedidos[0], { id: 'novo', nome: 'Novo', tipo: 'aberto' });
   assert.doesNotMatch(r.texto, /hash|salt|confeiteira|fusoHorario/);
 });
 
