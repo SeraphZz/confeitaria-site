@@ -18,16 +18,17 @@ App.pronto.then(async ({ loja, admin, usuario, pode, catalogo, atendimento, modu
   const COR_GRADE = corDoTema('--marca');
 
   // ------------------------------------------------------------ abas
-  // [aba, permissão exigida (null = toda a equipe: é onde cada um troca a própria senha), função que carrega]
+  // [aba, permissão exigida (null = toda a equipe: é onde cada um troca a própria senha; lista = basta uma), função que carrega]
   const TODAS_AS_ABAS = [
     ['resumo', 'resumo.ver', carregarResumo], ['pedidos', 'pedidos.ver', carregarPedidos], ['clientes', 'clientes.ver', carregarClientes],
     ['produtos', 'produtos.editar', carregarProdutos], ['aparencia', 'aparencia.editar', carregarAparencia],
-    ['equipe', 'usuarios.gerenciar', carregarEquipe], ['atividade', 'auditoria.ver', carregarAtividade], ['config', null, carregarConfig],
+    ['equipe', 'usuarios.gerenciar', carregarEquipe], ['atividade', 'auditoria.ver', carregarAtividade],
+    ['notificacoes', ['configuracoes.editar', 'notificacoes.gerenciar'], carregarNotificacoes], ['config', null, carregarConfig],
   ];
   const carregar = {};
   const ABAS = [];
   for (const [nome, permissao, funcao] of TODAS_AS_ABAS) {
-    const liberada = permissao === null || pode(permissao);
+    const liberada = permissao === null || [permissao].flat().some(pode);
     document.querySelector(`[data-aba=${nome}]`).hidden = !liberada;
     if (liberada) { ABAS.push(nome); carregar[nome] = funcao; } else el(`aba-${nome}`).hidden = true;
   }
@@ -589,6 +590,162 @@ App.pronto.then(async ({ loja, admin, usuario, pode, catalogo, atendimento, modu
       </tbody></table>` : '<p class="suave mb-0">Nada registrado ainda.</p>';
   }
   el('mais-atividade').addEventListener('click', () => carregarAtividade({ mais: true }).catch(tratarErro));
+
+  // ------------------------------------------------------------ notificações (canais, textos, teste e histórico)
+  // Quem pode alterar configurações edita os canais e os textos; quem tem "Acompanhar as notificações" vê o
+  // histórico, reenvia e testa. A aba aparece para quem tem uma das duas.
+  let opcoesNotificacao = null; // canais do servidor, acontecimentos e variáveis
+  const NOMES_EVENTO = { teste: 'Teste' };
+  const NOMES_CANAL = {};
+  const ESTADOS_NOTIFICACAO = { pendente: 'Na fila', enviada: 'Enviada', falhou: 'Falhou' };
+
+  async function carregarNotificacoes() {
+    opcoesNotificacao = await api('/api/notificacoes/opcoes');
+    for (const e of opcoesNotificacao.eventos) NOMES_EVENTO[e.id] = e.nome;
+    for (const c of opcoesNotificacao.canais) NOMES_CANAL[c.id] = c.nome;
+
+    el('form-notificacoes').hidden = !pode('configuracoes.editar');
+    el('notificacoes-acompanhar').hidden = !pode('notificacoes.gerenciar');
+    const tarefas = [];
+    if (pode('configuracoes.editar')) tarefas.push(api('/api/configuracoes').then((c) => desenharFormNotificacoes(c.notificacoes)));
+    if (pode('notificacoes.gerenciar')) {
+      el('teste-canal').innerHTML = opcoesNotificacao.canais.map((c) => `<option value="${c.id}"${c.configurado ? '' : ' disabled'}>${esc(c.nome)}${c.configurado ? '' : ' (não configurado)'}</option>`).join('');
+      el('nota-notificacoes').textContent = `As mensagens ficam guardadas por ${opcoesNotificacao.guardarDias} dias. Quando um envio falha, o sistema tenta de novo sozinho algumas vezes antes de desistir.`;
+      tarefas.push(carregarHistoricoNotificacoes());
+    }
+    await Promise.all(tarefas);
+  }
+
+  function desenharFormNotificacoes(cfg) {
+    el('lista-canais').innerHTML = opcoesNotificacao.canais.map((c) => `
+      <label class="d-flex gap-2 align-items-baseline mb-3"><input type="checkbox" data-canal="${c.id}" ${cfg.canais[c.id] ? 'checked' : ''}>
+        <span><strong>${esc(c.nome)}</strong><br><span class="suave fs-sm">${c.configurado
+          ? 'Configurado no servidor.'
+          : 'Ainda não configurado no servidor: mesmo ligado aqui, nada é enviado por este canal.'}</span></span></label>`).join('');
+    el('lista-variaveis').innerHTML = opcoesNotificacao.variaveis.map((v) => `<code>{${esc(v.id)}}</code> ${esc(v.descricao)}`).join(' · ');
+
+    el('lista-modelos').innerHTML = opcoesNotificacao.eventos.map((e) => {
+      const m = cfg.eventos[e.id];
+      const id = (campo) => `modelo-${e.id}-${campo}`;
+      return `
+      <details class="cartao-status" data-evento="${e.id}">
+        <summary><strong>${esc(e.nome)}</strong> <span class="suave fs-sm">· ${esc(e.descricao)}</span></summary>
+        <label class="d-flex gap-2 align-items-center mt-3 mb-4"><input type="checkbox" data-campo="ativo" ${m.ativo ? 'checked' : ''}> Enviar esta mensagem</label>
+        ${e.id === 'pedido_status' ? `<div class="mb-4"><span class="form-label">Avisar o cliente quando o pedido for para:</span>
+          <div class="destinos">${statusPedidos.map((s) => `<label class="d-flex gap-1 align-items-center"><input type="checkbox" data-avisar="${esc(s.id)}" ${m.silenciados.includes(s.id) ? '' : 'checked'}> ${esc(s.nome)}</label>`).join('')}</div></div>` : ''}
+        <h3 class="fs-md mb-2">E-mail</h3>
+        <div class="mb-3"><label class="form-label" for="${id('assunto')}">Assunto</label><input class="form-control" id="${id('assunto')}" data-campo="assunto" maxlength="120" required value="${esc(m.email.assunto)}"></div>
+        <div class="mb-4"><label class="form-label" for="${id('corpo')}">Texto</label><textarea class="form-control" id="${id('corpo')}" data-campo="corpo" rows="7" maxlength="2000" required>${esc(m.email.corpo)}</textarea></div>
+        <h3 class="fs-md mb-2">SMS</h3>
+        <div class="mb-4"><label class="form-label" for="${id('sms')}">Texto (curto: até 300 caracteres)</label><textarea class="form-control" id="${id('sms')}" data-campo="sms" rows="2" maxlength="300" required>${esc(m.sms.corpo)}</textarea></div>
+        <h3 class="fs-md mb-2">WhatsApp</h3>
+        <p class="suave fs-sm mb-3">No WhatsApp o texto não é livre: a Meta exige um modelo de mensagem aprovado por ela. Crie o modelo na sua conta do WhatsApp Business e informe aqui o nome dele e quais variáveis preenchem os campos {{1}}, {{2}}... do modelo, na ordem. Sem o nome do modelo, esta mensagem não vai por WhatsApp.</p>
+        <div class="row g-4">
+          <div class="col-12 md:col-5"><label class="form-label" for="${id('modelo')}">Nome do modelo</label><input class="form-control" id="${id('modelo')}" data-campo="modelo" maxlength="60" pattern="[a-z0-9_]*" placeholder="ex.: pedido_recebido" value="${esc(m.whatsapp.modelo)}"></div>
+          <div class="col-4 md:col-2"><label class="form-label" for="${id('idioma')}">Idioma</label><input class="form-control" id="${id('idioma')}" data-campo="idioma" maxlength="10" value="${esc(m.whatsapp.idioma)}"></div>
+          <div class="col-8 md:col-5"><label class="form-label" for="${id('parametros')}">Variáveis, na ordem</label><input class="form-control" id="${id('parametros')}" data-campo="parametros" maxlength="200" placeholder="ex.: cliente, numero, total" value="${esc(m.whatsapp.parametros.join(', '))}"></div>
+        </div>
+      </details>`;
+    }).join('');
+  }
+
+  el('form-notificacoes').addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    const corpo = { canais: {}, eventos: {} };
+    for (const caixa of el('lista-canais').querySelectorAll('[data-canal]')) corpo.canais[caixa.dataset.canal] = caixa.checked;
+    for (const cartao of el('lista-modelos').querySelectorAll('[data-evento]')) {
+      const valor = (campo) => cartao.querySelector(`[data-campo=${campo}]`).value;
+      const modelo = {
+        ativo: cartao.querySelector('[data-campo=ativo]').checked,
+        email: { assunto: valor('assunto'), corpo: valor('corpo') },
+        sms: { corpo: valor('sms') },
+        // "cliente, {numero} total" -> ['cliente', 'numero', 'total']
+        whatsapp: { modelo: valor('modelo'), idioma: valor('idioma'), parametros: valor('parametros').split(/[\s,;{}]+/).filter(Boolean) },
+      };
+      const avisos = [...cartao.querySelectorAll('[data-avisar]')];
+      if (avisos.length) modelo.silenciados = avisos.filter((c) => !c.checked).map((c) => c.dataset.avisar);
+      corpo.eventos[cartao.dataset.evento] = modelo;
+    }
+    try {
+      // Os cartões ficam como estão (abertos ou fechados): só confirma que gravou.
+      await api('/api/configuracoes/notificacoes', { metodo: 'PUT', corpo });
+      aviso('Notificações salvas.');
+    } catch (erro) {
+      // Campo inválido dentro de um cartão fechado não aparece: abre todos para a pessoa achar o que corrigir.
+      el('lista-modelos').querySelectorAll('details').forEach((d) => { d.open = true; });
+      tratarErro(erro);
+    }
+  });
+
+  // ---- histórico da fila
+  let notificacoes = [];
+  let paginaNotificacoes = { pagina: 0, paginas: 1 };
+
+  function situacaoHtml(n) {
+    const partes = [`<strong>${ESTADOS_NOTIFICACAO[n.estado]}</strong>`];
+    if (n.estado === 'enviada') partes.push(`<span class="suave">${quando(n.enviadaEm)}${n.tentativas > 1 ? ` · na ${n.tentativas}ª tentativa` : ''}</span>`);
+    if (n.estado === 'pendente' && n.tentativas) partes.push(`<span class="suave">${n.tentativas} tentativa(s); a próxima, ${quando(n.proximaEm)}</span>`);
+    if (n.erro) partes.push(`<span class="suave">${esc(n.erro)}</span>`);
+    if (n.estado === 'falhou') partes.push(`<button type="button" class="botao-texto" data-reenviar="${n.id}">Reenviar</button>`);
+    return partes.join('<br>');
+  }
+
+  function desenharNotificacoes() {
+    el('mais-notificacoes').hidden = paginaNotificacoes.pagina >= paginaNotificacoes.paginas;
+    el('lista-notificacoes').innerHTML = notificacoes.length ? `
+      <table class="tabela-simples tabela-atividade"><thead><tr><th>Quando</th><th>Para</th><th>Mensagem</th><th>Situação</th></tr></thead><tbody>
+        ${notificacoes.map((n) => `<tr>
+          <td>${quando(n.criadaEm)}</td>
+          <td>${n.para === 'loja' ? 'Loja' : n.para === 'teste' ? 'Teste' : 'Cliente'}<br><span class="suave">${esc(NOMES_CANAL[n.canal] || n.canal)} · ${esc(n.destinatario)}</span></td>
+          <td>${esc(NOMES_EVENTO[n.evento] || n.evento)}${n.pedidoNumero ? ` · pedido nº ${n.pedidoNumero}` : ''}<br><span class="suave">${esc(n.resumo)}</span></td>
+          <td>${situacaoHtml(n)}</td>
+        </tr>`).join('')}
+      </tbody></table>` : '<p class="suave mb-0">Nenhuma mensagem aqui.</p>';
+  }
+
+  async function carregarHistoricoNotificacoes({ mais = false } = {}) {
+    const numero = mais ? paginaNotificacoes.pagina + 1 : 1;
+    const resposta = await api(`/api/notificacoes?${new URLSearchParams({ estado: el('filtro-notificacoes').value, pagina: numero })}`);
+    const jaMostradas = new Set(mais ? notificacoes.map((n) => n.id) : []);
+    notificacoes = mais ? [...notificacoes, ...resposta.itens.filter((n) => !jaMostradas.has(n.id))] : resposta.itens;
+    paginaNotificacoes = resposta;
+    desenharNotificacoes();
+  }
+
+  el('filtro-notificacoes').addEventListener('change', () => carregarHistoricoNotificacoes().catch(tratarErro));
+  el('atualizar-notificacoes').addEventListener('click', () => carregarHistoricoNotificacoes().catch(tratarErro));
+  el('mais-notificacoes').addEventListener('click', () => carregarHistoricoNotificacoes({ mais: true }).catch(tratarErro));
+  el('lista-notificacoes').addEventListener('click', async (evento) => {
+    const id = evento.target.dataset.reenviar;
+    if (!id) return;
+    evento.target.disabled = true;
+    try {
+      const atualizada = await api(`/api/notificacoes/${id}/reenviar`, { metodo: 'POST', corpo: {} });
+      notificacoes = notificacoes.map((n) => (n.id === atualizada.id ? atualizada : n));
+      desenharNotificacoes();
+      aviso(atualizada.estado === 'enviada' ? 'Mensagem enviada.' : 'Ainda não foi: veja o motivo na lista.', { erro: atualizada.estado === 'falhou' });
+    } catch (erro) {
+      tratarErro(erro);
+      desenharNotificacoes();
+    }
+  });
+
+  el('form-teste-notificacao').addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    const botao = evento.target.querySelector('button');
+    botao.disabled = true;
+    el('teste-resultado').textContent = 'Enviando…';
+    try {
+      const r = await api('/api/notificacoes/teste', { metodo: 'POST', corpo: { canal: el('teste-canal').value, destinatario: el('teste-destinatario').value } });
+      el('teste-resultado').textContent = r.estado === 'enviada' ? 'Enviada. Confira se a mensagem chegou.'
+        : r.estado === 'falhou' ? `Não foi enviada. ${r.erro}` : 'O envio falhou agora e será tentado de novo; acompanhe no histórico.';
+      await carregarHistoricoNotificacoes();
+    } catch (erro) {
+      el('teste-resultado').textContent = erro.message;
+    } finally {
+      botao.disabled = false;
+    }
+  });
 
   // ------------------------------------------------------------ configurações
   const CAMPOS_LOJA = ['nome', 'slogan', 'whatsapp', 'instagram', 'email', 'endereco', 'cidade'];

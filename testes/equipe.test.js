@@ -10,7 +10,7 @@ const { subirServidor, SENHA_ADMIN, dadosCliente } = require('./apoio');
 
 const RAIZ = path.join(__dirname, '..');
 const TODAS = ['resumo.ver', 'pedidos.ver', 'pedidos.alterar', 'clientes.ver', 'produtos.editar', 'conteudo.editar',
-  'aparencia.editar', 'configuracoes.editar', 'usuarios.gerenciar', 'auditoria.ver'];
+  'aparencia.editar', 'configuracoes.editar', 'usuarios.gerenciar', 'auditoria.ver', 'notificacoes.gerenciar'];
 const SENHA = 'senha-da-equipe-1';
 
 let servidor, dona, visitante, perfis;

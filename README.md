@@ -38,6 +38,7 @@ Os dados ficam em um banco SQLite, o arquivo `data/loja.db`. As fotos ficam em `
 - Acompanhar pedidos, com busca e filtros, e mudar o status de cada um. Os status são da loja: ela escolhe os nomes, a ordem e para onde um pedido pode ir a partir de cada um (ver "Pedidos: status, histórico e busca").
 - Ver receita por dia, ticket médio e produtos que mais renderam (7, 30 ou 90 dias).
 - Trocar nome da loja, contatos, endereço, horários, formas de entrega, senha e o nome dado aos produtos em Configurações.
+- Avisar o cliente por e-mail, WhatsApp ou SMS quando o pedido é recebido e quando muda de status, e ser avisada de cada pedido novo (ver "Notificações").
 - Dar acesso ao painel a outras pessoas, cada uma com o próprio usuário e só com as permissões do perfil dela (Equipe), e ver quem fez o quê (Atividade).
 - Mudar cores, letra dos títulos, logotipo e banner em Aparência, vendo como fica antes de publicar.
 
@@ -90,6 +91,7 @@ src/permissoes.js  lista de permissões da equipe e como se calcula o que cada p
 src/equipe.js    regras para criar e alterar pessoas e perfis
 src/auditoria.js registro de atividades da equipe
 src/status.js    status dos pedidos: os que a loja criou e as transições permitidas
+src/notificacoes/ fila de envio, canais (e-mail, WhatsApp, SMS) e modelos das mensagens
 src/*.js         sessão, senhas, validação, datas, regras de pedidos, imagens e arquivos estáticos
 banco.js         camada de dados (SQLite): todas as consultas
 migracoes/       estrutura das tabelas, em arquivos numerados (ver abaixo)
@@ -176,7 +178,7 @@ A estrutura das tabelas fica em `migracoes/`, um arquivo numerado por mudança (
 
 Cada pessoa da equipe entra no painel com o próprio usuário e senha (Painel > Equipe). O que ela pode fazer vem do **perfil** dela, com **ajustes individuais** por cima.
 
-- **Permissões.** A lista é fixa e fica em `src/permissoes.js`: ver o resumo, ver pedidos, alterar pedidos, ver clientes, editar o catálogo, editar a página Sobre, mudar a aparência, alterar configurações, gerenciar a equipe e ver o registro de atividades. Cada rota do painel declara a permissão que exige (o 4º item da rota, em `src/rotas/`); o servidor confere em todo pedido. Sem login a resposta é 401; com login e sem a permissão, 403. As telas só escondem o que a pessoa não pode usar: quem decide é o servidor.
+- **Permissões.** A lista é fixa e fica em `src/permissoes.js`: ver o resumo, ver pedidos, alterar pedidos, ver clientes, editar o catálogo, editar a página Sobre, mudar a aparência, alterar configurações, gerenciar a equipe, ver o registro de atividades e acompanhar as notificações. Cada rota do painel declara a permissão que exige (o 4º item da rota, em `src/rotas/`); o servidor confere em todo pedido. Sem login a resposta é 401; com login e sem a permissão, 403. As telas só escondem o que a pessoa não pode usar: quem decide é o servidor.
 - **Perfis.** Um perfil é um conjunto de permissões. O **Administrador** é fixo: tem sempre todas (inclusive as que forem criadas depois) e não pode ser alterado nem excluído. A instalação traz dois perfis de exemplo, Atendimento e Catálogo, que podem ser alterados ou apagados. Perfil em uso não é excluído.
 - **Ajustes individuais.** Para uma pessoa específica dá para liberar uma permissão que o perfil não tem ou bloquear uma que ele tem.
 - **Ninguém concede o que não possui.** Quem gerencia a equipe só cria ou altera pessoas e perfis dentro das permissões que ele mesmo tem, e não mexe em quem pode mais do que ele (nem para tirar permissões ou trocar a senha). Ninguém altera o próprio perfil, os próprios ajustes ou se desativa. A loja nunca fica sem ao menos um Administrador ativo. As regras ficam em `src/equipe.js`.
@@ -201,6 +203,36 @@ Cada pessoa da equipe entra no painel com o próprio usuário e senha (Painel > 
 - Pedidos feitos antes desta versão não têm histórico (nada é inventado sobre o passado): ele começa na próxima mudança.
 
 **Busca e filtros (Painel > Pedidos).** Tudo é feito no servidor, em todos os pedidos, e os filtros somam: texto (nome do cliente, nome de um item, telefone ou número do pedido; maiúsculas e acentos não importam), status ("Em aberto", "Todos" ou um status), forma de receber (retirada ou entrega) e a data marcada para a entrega ou retirada (de/até). Na API: `GET /api/pedidos?busca=ana&status=abertos&entrega=retirada&de=2026-11-01&ate=2026-11-30&pagina=1`.
+
+## Notificações (e-mail, WhatsApp e SMS)
+
+O sistema avisa o cliente quando o pedido é recebido e quando muda de status, e avisa a loja quando chega um pedido. **Vem tudo desligado**: nada é enviado até a loja ligar um canal em Painel > Notificações.
+
+**Canais.** Cada canal precisa de duas coisas: as credenciais no servidor (variáveis de ambiente) e estar ligado no painel. As credenciais nunca vão para o banco, para o painel nem para os backups.
+
+| Canal | Variáveis de ambiente | Observações |
+|---|---|---|
+| E-mail | as mesmas do "esqueci minha senha": `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` | o cliente recebe no e-mail da conta; a loja, no e-mail de Configurações |
+| WhatsApp | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID` | API oficial da Meta (WhatsApp Cloud API); pago por mensagem |
+| SMS | `SMS_TWILIO_SID`, `SMS_TWILIO_TOKEN`, `SMS_TWILIO_FROM` | Twilio; pago por mensagem |
+
+- **WhatsApp exige modelo aprovado.** A Meta só deixa uma empresa iniciar conversa com um modelo de mensagem aprovado por ela. Por isso, no WhatsApp a loja não escreve o texto no painel: cria o modelo na conta do WhatsApp Business e informa aqui o nome dele, o idioma e quais variáveis preenchem os campos `{{1}}`, `{{2}}`... Sem o nome do modelo, aquela mensagem não vai por WhatsApp.
+- A versão da API da Meta faz parte do endereço (`WHATSAPP_API_URL`, padrão `https://graph.facebook.com/v21.0`); quando a Meta aposentar essa versão, troque a variável.
+- O `SITE_URL` é usado nos links das mensagens.
+- Telefones sem código do país recebem o 55 (Brasil).
+
+**Mensagens.** Três acontecimentos geram mensagem: pedido recebido (cliente), pedido mudou de status (cliente; dá para escolher em quais status avisar) e novo pedido (loja). A loja edita o assunto e o texto do e-mail e o texto do SMS de cada um. Os textos usam uma lista fechada de variáveis entre chaves (`{cliente}`, `{numero}`, `{total}`, `{status}`, `{itens}`, `{recebimento}`, `{data}`, `{telefone}`, `{loja}`, `{link}`, `{painel}`); uma variável que não existe é recusada ao salvar. O valor de cada variável entra como texto puro: nada do que o cliente digitou é interpretado.
+
+**Fila e novas tentativas.** A mensagem é gravada na tabela `notificacoes` na mesma transação do pedido (ou da mudança de status): pedido gravado tem a mensagem na fila; pedido recusado não gera mensagem. O envio acontece depois, sem segurar o cliente, por um trabalhador dentro do próprio servidor (`src/notificacoes/fila.js`).
+
+- Se o envio falha por algo passageiro (serviço fora do ar, limite de envios), o sistema tenta de novo depois de 1 min, 5 min, 30 min, 2 h e 6 h; depois disso a mensagem fica como "falhou". Recusa definitiva do serviço (número inválido, modelo recusado, credencial errada) falha na primeira.
+- Cada mensagem tem uma chave única (acontecimento + pessoa + canal): o mesmo acontecimento nunca entra duas vezes na fila.
+- Se o servidor cair no meio de um envio, a mensagem continua na fila e sai ao subir. Em casos raros isso pode repetir uma mensagem; nunca perde.
+- Um canal falhar não segura os outros, e um erro ao preparar a mensagem nunca impede o pedido.
+
+**Histórico e teste (Painel > Notificações).** Quem tem a permissão "Acompanhar as notificações" vê cada mensagem (para quem, por qual canal, o texto, a situação e o erro, se houve), reenvia as que falharam e envia um teste para um contato qualquer. O histórico guarda 90 dias. Os canais e os textos são configurações: exigem a permissão de alterar configurações.
+
+Limites: não há aviso por push do navegador; o cliente não escolhe quais avisos recebe (são mensagens sobre o próprio pedido); o envio de e-mail não tem teste automatizado (os de WhatsApp e SMS rodam contra um serviço simulado).
 
 ## Registro de atividades
 

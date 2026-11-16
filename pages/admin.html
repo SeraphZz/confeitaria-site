@@ -25,6 +25,7 @@
         <button type="button" role="tab" data-aba="aparencia">Aparência</button>
         <button type="button" role="tab" data-aba="equipe">Equipe</button>
         <button type="button" role="tab" data-aba="atividade">Atividade</button>
+        <button type="button" role="tab" data-aba="notificacoes">Notificações</button>
         <button type="button" role="tab" data-aba="config">Configurações</button>
       </div>
 
@@ -209,6 +210,46 @@
         <p class="suave fs-sm">O que a equipe fez no painel, do mais recente para o mais antigo: quem entrou, e tudo o que foi criado, alterado ou excluído. Este registro não pode ser alterado nem apagado.</p>
         <div class="painel mb-4" style="overflow-x: auto" id="lista-atividade"></div>
         <button type="button" class="btn btn-outline theme-primary" id="mais-atividade" hidden>Carregar mais</button>
+      </section>
+
+      <section id="aba-notificacoes" hidden>
+        <p class="suave mb-5">Mensagens automáticas para o cliente (pedido recebido, mudança de status) e para a loja (novo pedido). Nada é enviado enquanto nenhum canal estiver ligado.</p>
+        <form class="painel mb-5" id="form-notificacoes">
+          <h2 class="fs-lg mb-2">Canais</h2>
+          <p class="suave fs-sm mb-4">Ligue os canais que a loja usa. Cada canal precisa antes ser configurado no servidor por quem cuida da instalação (as senhas dos serviços de envio não ficam no painel). WhatsApp e SMS são serviços pagos, cobrados por mensagem.</p>
+          <div id="lista-canais" class="mb-5"></div>
+          <h2 class="fs-lg mb-2">Mensagens</h2>
+          <p class="suave fs-sm mb-2">Escreva os textos usando as variáveis abaixo, entre chaves: elas são trocadas pelos dados de cada pedido.</p>
+          <p class="fs-sm mb-4" id="lista-variaveis"></p>
+          <div id="lista-modelos"></div>
+          <button class="btn btn-solid theme-primary mt-4">Salvar notificações</button>
+        </form>
+        <div id="notificacoes-acompanhar">
+          <form class="painel mb-5" id="form-teste-notificacao">
+            <h2 class="fs-lg mb-2">Enviar um teste</h2>
+            <p class="suave fs-sm mb-4">Envia agora a mensagem de "Pedido recebido", com dados de exemplo, para o contato que você informar. Serve para conferir se o canal está funcionando (salve os textos antes).</p>
+            <div class="row g-4 align-items-end">
+              <div class="col-6 md:col-3"><label class="form-label" for="teste-canal">Canal</label><select class="form-control" id="teste-canal"></select></div>
+              <div class="col-6 md:col-5"><label class="form-label" for="teste-destinatario">Para (e-mail ou telefone com DDD)</label><input class="form-control" id="teste-destinatario" maxlength="120" required></div>
+              <div class="col-12 md:col-4"><button class="btn btn-outline theme-primary w-100">Enviar teste</button></div>
+            </div>
+            <p class="fs-sm mt-3 mb-0" id="teste-resultado" role="status"></p>
+          </form>
+          <div class="painel">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-2">
+              <h2 class="fs-lg mb-0">Histórico de envios</h2>
+              <div class="d-flex align-items-center gap-3">
+                <select class="form-control" id="filtro-notificacoes" aria-label="Mostrar" style="width: auto">
+                  <option value="">Todas</option><option value="falhou">Que falharam</option><option value="pendente">Na fila</option><option value="enviada">Enviadas</option>
+                </select>
+                <button type="button" class="btn btn-outline theme-primary btn-sm" id="atualizar-notificacoes">Atualizar</button>
+              </div>
+            </div>
+            <p class="suave fs-sm mb-4" id="nota-notificacoes"></p>
+            <div style="overflow-x: auto" id="lista-notificacoes"></div>
+            <button type="button" class="btn btn-outline theme-primary mt-4" id="mais-notificacoes" hidden>Carregar mais</button>
+          </div>
+        </div>
       </section>
 
       <section id="aba-config" hidden>
